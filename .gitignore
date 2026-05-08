@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# MCPB generated artifacts
+mcpb/server/
+*.mcpb
+
+# Logs
+*.log
+logs/
+
+# macOS
+.DS_Store
+
+# Environment / secrets
+.env
+.env.*
+
+# Internal docs
+PLAN.md
+docs/
+
+# Editor
+.vscode/
+.idea/

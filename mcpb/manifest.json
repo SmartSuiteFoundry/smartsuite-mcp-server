@@ -1,0 +1,81 @@
+{
+  "manifest_version": "0.3",
+  "name": "smartsuite-mcp-server",
+  "display_name": "SmartSuite MCP Server",
+  "version": "0.1.0",
+  "description": "Local MCP server for governed access to SmartSuite solutions, applications, records, fields, comments, and SmartDocs.",
+  "author": {
+    "name": "SmartSuite"
+  },
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "SMARTSUITE_ACCOUNT_ID": "${user_config.account_id}",
+        "SMARTSUITE_API_KEY": "${user_config.api_key}",
+        "SMARTSUITE_BASE_URL": "${user_config.base_url}",
+        "SMARTSUITE_MCP_MODE": "${user_config.mode}",
+        "SMARTSUITE_MAX_RECORDS": "${user_config.max_records}",
+        "SMARTSUITE_ENABLE_DELETE": "${user_config.enable_delete}",
+        "SMARTSUITE_ENABLE_SMARTDOC_WRITE": "${user_config.enable_smartdoc_write}"
+      }
+    }
+  },
+  "user_config": {
+    "account_id": {
+      "type": "string",
+      "title": "SmartSuite Account ID",
+      "description": "Your SmartSuite account ID (e.g. x8zfht5g).",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "SmartSuite API Key",
+      "description": "Your SmartSuite API key.",
+      "required": true,
+      "sensitive": true
+    },
+    "base_url": {
+      "type": "string",
+      "title": "SmartSuite API Base URL",
+      "description": "SmartSuite API base URL. Leave as default unless using a private instance.",
+      "required": true,
+      "default": "https://app.smartsuite.com/api/v1"
+    },
+    "mode": {
+      "type": "string",
+      "title": "Access Mode",
+      "description": "readonly: inspect data only. readwrite: create and update records. admin: all operations.",
+      "required": true,
+      "default": "readonly"
+    },
+    "max_records": {
+      "type": "number",
+      "title": "Maximum Records Per Tool Call",
+      "description": "Hard cap for list and query tools.",
+      "required": false,
+      "default": 100
+    },
+    "enable_delete": {
+      "type": "boolean",
+      "title": "Enable Delete Tools",
+      "description": "Allow record deletion. Destructive — requires confirmation.",
+      "required": false,
+      "default": false
+    },
+    "enable_smartdoc_write": {
+      "type": "boolean",
+      "title": "Enable SmartDoc Writes",
+      "description": "Allow appending content to SmartDoc fields.",
+      "required": false,
+      "default": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32"]
+  }
+}

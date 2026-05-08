@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "smartsuite": {
+      "type": "stdio",
+      "command": "smartsuite-mcp",
+      "args": [],
+      "env": {
+        "SMARTSUITE_ACCOUNT_ID": "your-account-id",
+        "SMARTSUITE_API_KEY": "your-api-key",
+        "SMARTSUITE_BASE_URL": "https://app.smartsuite.com/api/v1",
+        "SMARTSUITE_MCP_MODE": "readwrite"
+      }
+    }
+  }
+}
