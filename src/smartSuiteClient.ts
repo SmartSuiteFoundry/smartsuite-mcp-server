@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import https from 'node:https';
+import path from 'node:path';
 import { buildAuthHeaders } from './auth.js';
 import { SmartSuiteError, httpStatusToCode } from './errors.js';
 import { Logger } from './logger.js';
@@ -257,5 +260,98 @@ export class SmartSuiteClient {
 
   async getView(applicationId: string, viewId: string): Promise<ViewDetail> {
     return this.request<ViewDetail>('GET', `/applications/${applicationId}/views/${viewId}/`);
+  }
+
+  // ── Files ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Resolve a Filestack handle to a signed CDN download URL.
+   * The API returns a 302 redirect; we capture the Location header directly
+   * rather than following it so we return the URL without downloading the file.
+   */
+  async getFileUrl(fileHandle: string): Promise<string> {
+    const url = new URL(`${this.cfg.baseUrl}/shared-files/${fileHandle}/get_url/`);
+
+    return new Promise((resolve, reject) => {
+      const options: https.RequestOptions = {
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: url.pathname + url.search,
+        method: 'GET',
+        headers: {
+          'Authorization': `Token ${this.cfg.apiKey}`,
+          'ACCOUNT-ID': this.cfg.accountId,
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        res.resume(); // consume body so the socket is released
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          const location = res.headers['location'];
+          if (location) return resolve(location);
+        }
+        reject(new SmartSuiteError(
+          'SMARTSUITE_API_ERROR',
+          `Expected redirect for file handle ${fileHandle}, got HTTP ${res.statusCode}`,
+          undefined,
+          res.statusCode,
+        ));
+      });
+
+      req.setTimeout(this.cfg.requestTimeoutMs, () => {
+        req.destroy();
+        reject(new SmartSuiteError('SMARTSUITE_TIMEOUT', `Timed out resolving file handle ${fileHandle}`));
+      });
+
+      req.on('error', (err) => reject(new SmartSuiteError('SMARTSUITE_API_ERROR', err.message)));
+      req.end();
+    });
+  }
+
+  /**
+   * Upload a file from the local filesystem to a SmartSuite file field.
+   * Uses multipart/form-data as required by the recordfiles endpoint.
+   */
+  async uploadFile(
+    applicationId: string,
+    recordId: string,
+    fieldSlug: string,
+    filePath: string,
+    filename?: string,
+  ): Promise<unknown> {
+    const resolvedPath = path.resolve(filePath);
+    if (!fs.existsSync(resolvedPath)) {
+      throw new SmartSuiteError('SMARTSUITE_VALIDATION_ERROR', `File not found: ${resolvedPath}`);
+    }
+
+    const fileBuffer = fs.readFileSync(resolvedPath);
+    const fileName = filename ?? path.basename(resolvedPath);
+
+    const formData = new FormData();
+    formData.append('files', new Blob([fileBuffer]), fileName);
+
+    const url = `${this.cfg.baseUrl}/recordfiles/${applicationId}/${recordId}/${fieldSlug}/`;
+
+    // Omit Content-Type so fetch sets it automatically with the multipart boundary.
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${this.cfg.apiKey}`,
+        'ACCOUNT-ID': this.cfg.accountId,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new SmartSuiteError(
+        httpStatusToCode(res.status),
+        `File upload failed (${res.status}): ${text.slice(0, 200)}`,
+        undefined,
+        res.status,
+      );
+    }
+
+    return res.json();
   }
 }

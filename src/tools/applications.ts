@@ -10,6 +10,7 @@ function normalizeField(f: FieldDefinition) {
     required: f.params.required ?? false,
     primary: f.params.primary ?? false,
     hidden: f.params.hidden ?? false,
+    ...(f.params.help_text ? { helpText: f.params.help_text } : {}),
     ...(f.params.choices?.length
       ? {
           options: f.params.choices.map((c) => ({
@@ -18,10 +19,8 @@ function normalizeField(f: FieldDefinition) {
           })),
         }
       : {}),
-    ...(f.params.linked_application
-      ? { linkedApplication: f.params.linked_application }
-      : {}),
-    ...(f.params.help_text ? { helpText: f.params.help_text } : {}),
+    ...(f.params.linked_application ? { linkedApplication: f.params.linked_application } : {}),
+    ...(f.params.linked_field_slug  ? { linkedFieldSlug: f.params.linked_field_slug }   : {}),
   };
 }
 

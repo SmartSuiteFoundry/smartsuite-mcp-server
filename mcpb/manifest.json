@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "smartsuite-mcp-server",
   "display_name": "SmartSuite MCP Server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local MCP server for governed access to SmartSuite solutions, applications, records, fields, comments, and SmartDocs.",
   "author": {
     "name": "SmartSuite"

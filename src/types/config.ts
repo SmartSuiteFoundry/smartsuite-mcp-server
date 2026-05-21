@@ -20,5 +20,6 @@ export interface Config {
   retryCount: number;
   schemaCacheTtlMs: number;
   auditIncludeValues: boolean;
+  aiEnrichedRecords: boolean;
   serverVersion: string;
 }

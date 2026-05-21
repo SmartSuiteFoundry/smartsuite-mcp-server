@@ -109,6 +109,7 @@ export const TOOL_DEFINITIONS = [
         },
         limit: { type: 'number', description: 'Max records to return (default 50, max set by server config)' },
         cursor: { type: 'string', description: 'Pagination cursor from a previous response' },
+        includeFieldContext: { type: 'boolean', description: 'When true, adds a _fieldContext map to the response with label, type, helpText, and linked field info for each slug. Defaults to SMARTSUITE_AI_ENRICHED_RECORDS server setting.' },
         sort: {
           type: 'array',
           items: {
@@ -138,6 +139,7 @@ export const TOOL_DEFINITIONS = [
           items: { type: 'string' },
           description: 'Field slugs to include (empty = all fields)',
         },
+        includeFieldContext: { type: 'boolean', description: 'When true, each field value is returned as an annotated object with slug, label, type, helpText, linkedApplication, linkedFieldSlug, and value.' },
       },
       required: ['applicationId', 'recordId'],
     },
@@ -158,6 +160,7 @@ export const TOOL_DEFINITIONS = [
         },
         limit: { type: 'number', description: 'Max records to return (default 25)' },
         cursor: { type: 'string', description: 'Pagination cursor' },
+        includeFieldContext: { type: 'boolean', description: 'When true, adds a _fieldContext map to the response.' },
       },
       required: ['applicationId', 'query'],
     },
@@ -208,6 +211,7 @@ export const TOOL_DEFINITIONS = [
         },
         limit: { type: 'number', description: 'Max records (default 50)' },
         cursor: { type: 'string', description: 'Pagination cursor' },
+        includeFieldContext: { type: 'boolean', description: 'When true, adds a _fieldContext map to the response.' },
       },
       required: ['applicationId', 'filter'],
     },
@@ -368,6 +372,41 @@ export const TOOL_DEFINITIONS = [
     },
     annotations: { readOnlyHint: true },
   },
+  // ── Files ──────────────────────────────────────────────────────────────────
+  {
+    name: 'smartsuite_get_file_url',
+    description: [
+      'Resolve a SmartSuite file handle to a signed CDN download URL.',
+      'SmartSuite file fields (type: filefield) return an array of file objects — each has a "handle" property.',
+      'Pass that handle here to get a temporary URL for downloading the file.',
+      'Example field value: [{ "handle": "abc123", "filename": "report.pdf", "size": 12345, "mimetype": "application/pdf" }]',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fileHandle: { type: 'string', description: 'The Filestack handle from a file field value (the "handle" property)' },
+      },
+      required: ['fileHandle'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_upload_file',
+    description: 'Upload a file from the local filesystem to a SmartSuite file field. Requires readwrite or admin mode. The file is read from the local path and posted as multipart form data.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID' },
+        recordId: { type: 'string', description: 'The record ID' },
+        fieldSlug: { type: 'string', description: 'The file field slug' },
+        filePath: { type: 'string', description: 'Absolute or relative path to the file on the local filesystem' },
+        filename: { type: 'string', description: 'Override the filename sent to SmartSuite (defaults to the basename of filePath)' },
+      },
+      required: ['applicationId', 'recordId', 'fieldSlug', 'filePath'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+
   {
     name: 'smartsuite_append_smartdoc_content',
     description: 'Append markdown content to a SmartDoc field. Requires readwrite or admin mode AND SMARTSUITE_ENABLE_SMARTDOC_WRITE=true. Does not replace existing content.',

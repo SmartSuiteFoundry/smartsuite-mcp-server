@@ -1,6 +1,6 @@
 import { Config, LogLevel, McpMode } from './types/config.js';
 
-const SERVER_VERSION = '0.1.0';
+const SERVER_VERSION = '0.2.0';
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
   const val = env[key];
@@ -63,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     retryCount: optionalInt(env, 'SMARTSUITE_RETRY_COUNT', 2),
     schemaCacheTtlMs: optionalInt(env, 'SCHEMA_CACHE_TTL_MS', 300000),
     auditIncludeValues: optionalBool(env, 'SMARTSUITE_AUDIT_INCLUDE_VALUES', false),
+    aiEnrichedRecords: optionalBool(env, 'SMARTSUITE_AI_ENRICHED_RECORDS', false),
     serverVersion: SERVER_VERSION,
   };
 }

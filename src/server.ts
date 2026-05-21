@@ -28,6 +28,7 @@ import {
 import { handleListComments, handleCreateComment } from './tools/comments.js';
 import { handleListViews, handleDescribeView } from './tools/views.js';
 import { handleGetSmartdocContent, handleAppendSmartdocContent } from './tools/smartdocs.js';
+import { handleGetFileUrl, handleUploadFile } from './tools/files.js';
 
 type ToolHandler = (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>;
 
@@ -51,8 +52,10 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_create_comment:        handleCreateComment,
   smartsuite_list_views:            handleListViews,
   smartsuite_describe_view:         handleDescribeView,
-  smartsuite_get_smartdoc_content:  handleGetSmartdocContent,
+  smartsuite_get_smartdoc_content:    handleGetSmartdocContent,
   smartsuite_append_smartdoc_content: handleAppendSmartdocContent,
+  smartsuite_get_file_url:            handleGetFileUrl,
+  smartsuite_upload_file:             handleUploadFile,
 };
 
 interface ServerDeps {
