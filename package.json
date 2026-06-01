@@ -14,7 +14,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "smoke": "node dist/index.js --smoke",
-    "pack:mcpb": "npm run bundle && node scripts/package-mcpb.js && cd mcpb && mcpb pack",
+    "pack:mcpb": "npm run bundle && node scripts/package-mcpb.js && cd mcpb && mcpb pack . smartsuite-mcp-server-$npm_package_version.mcpb",
     "docker:build": "docker build -f docker/Dockerfile -t smartsuite/mcp-server:local ."
   },
   "dependencies": {

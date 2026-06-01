@@ -14,19 +14,23 @@ The SmartSuite MCP server runs on your machine and communicates with your MCP cl
 
 ## Installation
 
-### Option 1: npm (global)
+### Option 1: Claude Desktop extension (.mcpb)
+
+Download the latest `smartsuite-mcp-server-*.mcpb` from the [Releases page](https://github.com/SmartSuiteFoundry/smartsuite-mcp-server/releases), then double-click to install in Claude Desktop. You'll be prompted for your account ID and API key. No Node.js required.
+
+### Option 2: npm (global)
 
 ```bash
 npm install -g @smartsuite/mcp-server
 ```
 
-### Option 2: npx (no install)
+### Option 3: npx (no install)
 
 ```bash
 npx @smartsuite/mcp-server
 ```
 
-### Option 3: Docker
+### Option 4: Docker
 
 ```bash
 docker pull smartsuite/mcp-server:latest
@@ -125,6 +129,7 @@ Set with `SMARTSUITE_MCP_MODE`. Default is `readonly`.
 | `SMARTSUITE_REQUEST_TIMEOUT_MS` | `30000` | HTTP request timeout in milliseconds |
 | `SMARTSUITE_RETRY_COUNT` | `2` | Number of retries for rate limits and transient errors |
 | `SCHEMA_CACHE_TTL_MS` | `300000` | Application schema cache TTL (5 min) |
+| `SMARTSUITE_AI_ENRICHED_RECORDS` | `false` | Return field context (label, type, help text, linked field) with every record response |
 
 ---
 
@@ -175,6 +180,13 @@ Set with `SMARTSUITE_MCP_MODE`. Default is `readonly`.
 |------|------|-------------|
 | `smartsuite_get_smartdoc_content` | readonly | Read a SmartDoc field as plain text and raw value |
 | `smartsuite_append_smartdoc_content` | readwrite + enable_smartdoc_write | Append markdown to a SmartDoc field |
+
+### Files
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `smartsuite_get_file_url` | readonly | Resolve a file field handle to a signed CDN download URL |
+| `smartsuite_upload_file` | readwrite | Upload a local file to a SmartSuite file field |
 
 ---
 
@@ -228,6 +240,10 @@ npm test
 
 # Bundle single file for Docker/MCPB
 npm run bundle
+
+# Build and package the Claude Desktop extension (.mcpb)
+npm run pack:mcpb
+# Output: mcpb/smartsuite-mcp-server-<version>.mcpb
 ```
 
 ### Project structure
@@ -250,6 +266,7 @@ src/
     fields.ts
     records.read.ts
     records.write.ts
+    files.ts
     comments.ts
     views.ts
     smartdocs.ts
