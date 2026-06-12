@@ -1,0 +1,266 @@
+{
+  "label": "Dashboard",
+  "description": "",
+  "is_description_inline": true,
+  "is_description_enabled": false,
+  "solution": "63c4a5e3fbb0b8623735210d",
+  "application": "680924f3c847d4ccd9fa97d5",
+  "state": {
+    "filterWindow": {
+      "opened": false,
+      "filter": {
+        "operator": "and",
+        "fields": []
+      },
+      "new_filters": {
+        "operator": "and",
+        "conditions": []
+      }
+    },
+    "fieldsWindow": {
+      "visibleFields": [
+        "title"
+      ],
+      "fixedFieldsCount": 1,
+      "columnsWidth": {},
+      "collapsed": []
+    },
+    "aggregates": {},
+    "coverWindow": null,
+    "sortWindow": {
+      "sort": []
+    },
+    "groupbyWindow": {
+      "collapsed": {},
+      "group": []
+    },
+    "spotlightWindow": {
+      "spotlights": [],
+      "by_field_colors": null
+    },
+    "cardSizeWindow": {
+      "size": "s"
+    },
+    "rowSizeWindow": {
+      "size": "compact",
+      "previousSize": null
+    },
+    "stackByWindow": {
+      "columnFieldSlug": null,
+      "swimlaneFieldSlug": null,
+      "collapsedColumns": [],
+      "collapsedSwimlanes": [],
+      "columnsValues": [],
+      "hideEmptyColumns": false,
+      "hideEmptySwimlanes": false,
+      "collapseAllSwimlanesByDefault": false
+    },
+    "locationByWindow": {
+      "selectedFieldSlug": null
+    },
+    "calendarFieldsWindow": {
+      "fields": [],
+      "showRecordsList": false,
+      "viewType": "dayGridMonth",
+      "externalReportsInfo": [],
+      "displayWeekends": true
+    },
+    "timelineFieldsWindow": {
+      "fields": [],
+      "viewMode": "day",
+      "showRecordsList": false,
+      "periods": []
+    },
+    "ganttFieldsWindow": {
+      "viewPreset": "weekAndDayLetter",
+      "showDependencyArrows": true,
+      "showTaskLabels": true,
+      "highlightCriticalPath": false,
+      "showProjectStartAndEndPoints": false,
+      "highlightNonWorkingDays": false,
+      "showColumnLines": true,
+      "showTodayLine": true
+    },
+    "chartSettings": {
+      "sidebarActive": true,
+      "selectedFields": [],
+      "selectedChart": "bar",
+      "checkedLegends": [],
+      "sortedLegends": [],
+      "customSortApplied": false,
+      "groupByField": {
+        "slug": null,
+        "nestedOption": null,
+        "additionalOption": null
+      },
+      "dynamicFilterField": {
+        "slug": null,
+        "nestedOption": null,
+        "fieldOptions": [],
+        "selectedOption": null
+      },
+      "dynamicFilterSectionExpanded": false,
+      "advancedChartOptions": {
+        "show_dots": false,
+        "show_data_labels": false
+      },
+      "advancedChartOptionsExpanded": false,
+      "categories": [],
+      "drillIn": {
+        "group_by_window": {
+          "collapsed": {},
+          "group": [],
+          "max_groups_count": 0
+        },
+        "sort_window": {},
+        "spotlight_window": {
+          "spotlights": [],
+          "by_field_colors": ""
+        },
+        "row_size_window": {
+          "size": "compact",
+          "previous_size": "compact"
+        },
+        "aggregates": {},
+        "fields_window": {
+          "visible_fields": [],
+          "fixed_fields_count": 0,
+          "columns_width": {},
+          "collapsed": []
+        }
+      },
+      "benchmarkLines": [],
+      "benchmarkLinesSectionExpanded": false,
+      "totals": [],
+      "totalsSectionExpanded": false
+    },
+    "isToolbarVisible": true
+  },
+  "map_state": {
+    "settings": {
+      "mapTypeId": "roadmap",
+      "locationRadius": {
+        "enabled": false,
+        "meters": 0,
+        "measureUnit": "miles"
+      },
+      "locationMarker": {
+        "iconType": "pin",
+        "iconSizeType": "m",
+        "iconColor": "#3A86FF"
+      },
+      "displayElements": {
+        "roadmap": {
+          "labels": 1,
+          "terrain": 1,
+          "highways": 2,
+          "roads": 2,
+          "transit": 0,
+          "poi": 1,
+          "water": 2
+        },
+        "satellite": {
+          "labels": 1,
+          "terrain": 1,
+          "highways": 2,
+          "roads": 0,
+          "transit": 0,
+          "poi": 0,
+          "water": 2
+        },
+        "hybrid": {
+          "labels": 1,
+          "terrain": 1,
+          "highways": 2,
+          "roads": 2,
+          "transit": 0,
+          "poi": 0,
+          "water": 2
+        },
+        "silver": {
+          "labels": 2,
+          "terrain": 1,
+          "highways": 2,
+          "roads": 2,
+          "transit": 1,
+          "poi": 1,
+          "water": 2
+        },
+        "retro": {
+          "labels": 2,
+          "terrain": 1,
+          "highways": 2,
+          "roads": 2,
+          "transit": 1,
+          "poi": 1,
+          "water": 2
+        }
+      }
+    },
+    "sidebarActive": false
+  },
+  "form_state": null,
+  "private_member": "5fa01dedaa4e41222745cbab",
+  "autosave": true,
+  "is_locked": false,
+  "view_mode": "dashboard",
+  "order": 6,
+  "owner": "5fa01dedaa4e41222745cbab",
+  "is_private": true,
+  "parent_folder": null,
+  "disable_inline_editing": false,
+  "sharing_hash": "vOWESVWUpc",
+  "sharing_password": null,
+  "sharing_allow_copy": false,
+  "sharing_allow_all_fields": false,
+  "sharing_allow_export": true,
+  "sharing_allow_open_record": false,
+  "sharing_enabled": false,
+  "sharing_show_toolbar": true,
+  "sharing_show_records_list": true,
+  "dashboard": {
+    "tabs": {
+      "enabled": false,
+      "position": "left",
+      "tabs": [
+        {
+          "id": "zwNPWn",
+          "name": "Tab",
+          "order": 0
+        }
+      ],
+      "logo": null,
+      "logo_size": null,
+      "action_buttons": {
+        "size": "medium",
+        "alignment": "left",
+        "items": [],
+        "columns": []
+      }
+    },
+    "footer": {
+      "enabled": false,
+      "layout": "simple",
+      "logo": null,
+      "logo_size": null,
+      "links": {
+        "size": "medium",
+        "alignment": "left",
+        "items": [],
+        "columns": []
+      },
+      "social_networks": [],
+      "tagline": {},
+      "text_color": null,
+      "background": null
+    },
+    "style": {
+      "width": "auto",
+      "background_color": "#FFFFFF"
+    }
+  },
+  "document": null,
+  "permissions": null,
+  "id": "6a2894de824820626116e9c6",
+  "is_password_protected": false
+}

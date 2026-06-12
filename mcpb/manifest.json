@@ -2,8 +2,8 @@
   "manifest_version": "0.3",
   "name": "smartsuite-mcp-server",
   "display_name": "SmartSuite MCP Server",
-  "version": "0.2.0",
-  "description": "Local MCP server for governed access to SmartSuite solutions, applications, records, fields, comments, and SmartDocs.",
+  "version": "0.7.0",
+  "description": "Local MCP server for governed access to SmartSuite solutions, applications, records, fields, formulas, views, dashboards, automations, comments, and SmartDocs.",
   "author": {
     "name": "SmartSuite"
   },
@@ -13,7 +13,9 @@
     "entry_point": "server/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/index.js"],
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
       "env": {
         "SMARTSUITE_ACCOUNT_ID": "${user_config.account_id}",
         "SMARTSUITE_API_KEY": "${user_config.api_key}",
@@ -21,7 +23,9 @@
         "SMARTSUITE_MCP_MODE": "${user_config.mode}",
         "SMARTSUITE_MAX_RECORDS": "${user_config.max_records}",
         "SMARTSUITE_ENABLE_DELETE": "${user_config.enable_delete}",
-        "SMARTSUITE_ENABLE_SMARTDOC_WRITE": "${user_config.enable_smartdoc_write}"
+        "SMARTSUITE_ENABLE_SMARTDOC_WRITE": "${user_config.enable_smartdoc_write}",
+        "SMARTSUITE_ENABLE_CROSS_WORKSPACE": "${user_config.enable_cross_workspace}",
+        "SMARTSUITE_ALLOWED_WORKSPACES": "${user_config.allowed_workspaces}"
       }
     }
   },
@@ -29,7 +33,7 @@
     "account_id": {
       "type": "string",
       "title": "SmartSuite Account ID",
-      "description": "Your SmartSuite account ID (e.g. x8zfht5g).",
+      "description": "Your SmartSuite account ID (e.g. abc12xyz).",
       "required": true
     },
     "api_key": {
@@ -73,9 +77,26 @@
       "description": "Allow appending content to SmartDoc fields.",
       "required": false,
       "default": false
+    },
+    "enable_cross_workspace": {
+      "type": "boolean",
+      "title": "Enable Cross-Workspace Access",
+      "description": "Allow read-only access to other workspaces your API key can reach. Writes always target the primary workspace only.",
+      "required": false,
+      "default": false
+    },
+    "allowed_workspaces": {
+      "type": "string",
+      "title": "Allowed Workspaces",
+      "description": "Optional comma-separated workspace slugs or names reachable when cross-workspace access is on. Leave empty to allow all accessible workspaces.",
+      "required": false,
+      "default": ""
     }
   },
   "compatibility": {
-    "platforms": ["darwin", "win32"]
+    "platforms": [
+      "darwin",
+      "win32"
+    ]
   }
 }

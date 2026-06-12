@@ -1,6 +1,6 @@
 import { Config, LogLevel, McpMode } from './types/config.js';
 
-const SERVER_VERSION = '0.2.0';
+const SERVER_VERSION = '0.7.0';
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
   const val = env[key];
@@ -52,6 +52,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     allowedSolutions: parseList(env['SMARTSUITE_ALLOWED_SOLUTIONS']),
     allowedApplications: parseList(env['SMARTSUITE_ALLOWED_APPLICATIONS']),
     deniedApplications: parseList(env['SMARTSUITE_DENIED_APPLICATIONS']),
+    enableCrossWorkspace: optionalBool(env, 'SMARTSUITE_ENABLE_CROSS_WORKSPACE', false),
+    allowedWorkspaces: parseList(env['SMARTSUITE_ALLOWED_WORKSPACES']),
     maxRecords: optionalInt(env, 'SMARTSUITE_MAX_RECORDS', 100),
     maxBatchWrites: optionalInt(env, 'SMARTSUITE_MAX_BATCH_WRITES', 25),
     enableDelete: optionalBool(env, 'SMARTSUITE_ENABLE_DELETE', false),

@@ -8,6 +8,7 @@ import { withRetry } from './utils/retry.js';
 import {
   ApplicationDetail,
   ApplicationSummary,
+  FieldDefinition,
   BulkCreateResponse,
   BulkUpdateResponse,
   Comment,
@@ -17,9 +18,21 @@ import {
   ListRecordsResponse,
   SmartSuiteRecord,
   Solution,
-  View,
-  ViewDetail,
+  Report,
+  DashboardWidget,
+  Workspace,
+  Automation,
 } from './types/smartsuite.js';
+
+/** Widget `params` arrives as a JSON-encoded string; decode it, leaving non-strings untouched. */
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 interface SchemaEntry {
   schema: ApplicationDetail;
@@ -43,6 +56,24 @@ export class SmartSuiteClient {
     private readonly logger: Logger,
   ) {}
 
+  /** The workspace slug (ACCOUNT-ID) this client is currently bound to. */
+  get accountId(): string {
+    return this.cfg.accountId;
+  }
+
+  /**
+   * Return a client bound to a different workspace (ACCOUNT-ID), reusing the same
+   * config, logger, and schema cache. Cheap — used to target a non-primary
+   * workspace for a single request. The schema cache is keyed by account+app, so
+   * sharing it across workspaces is safe.
+   */
+  withAccount(accountId: string): SmartSuiteClient {
+    if (accountId === this.cfg.accountId) return this;
+    const clone = new SmartSuiteClient({ ...this.cfg, accountId }, this.logger);
+    clone.schemaCache = this.schemaCache;
+    return clone;
+  }
+
   // ── Internal request helper ────────────────────────────────────────────────
 
   private async request<T>(
@@ -50,7 +81,16 @@ export class SmartSuiteClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const url = `${this.cfg.baseUrl}${path}`;
+    return this.requestUrl<T>(method, `${this.cfg.baseUrl}${path}`, body);
+  }
+
+  /** Like request(), but takes a full URL — used for endpoints outside the /api/v1 REST base (e.g. the automation-engine RPC). */
+  private async requestUrl<T>(
+    method: string,
+    url: string,
+    body?: unknown,
+  ): Promise<T> {
+    const path = url;
     const headers = buildAuthHeaders(this.cfg.apiKey, this.cfg.accountId);
 
     return withRetry(
@@ -83,8 +123,10 @@ export class SmartSuiteClient {
         }
 
         if (res.status === 204) return undefined as T;
-        const json = await res.json() as T;
-        return json;
+        // Some endpoints (e.g. add_field/change_field) return 200 with an empty body.
+        const text = await res.text();
+        if (!text) return undefined as T;
+        return JSON.parse(text) as T;
       },
       { maxAttempts: this.cfg.retryCount + 1 },
     );
@@ -97,12 +139,13 @@ export class SmartSuiteClient {
     opts: { forceRefresh?: boolean } = {},
   ): Promise<ApplicationDetail> {
     const now = Date.now();
-    const cached = this.schemaCache.get(applicationId);
+    const cacheKey = `${this.cfg.accountId}:${applicationId}`;
+    const cached = this.schemaCache.get(cacheKey);
     if (!opts.forceRefresh && cached && cached.expiresAt > now) {
       return cached.schema;
     }
     const schema = await this.request<ApplicationDetail>('GET', `/applications/${applicationId}/`);
-    this.schemaCache.set(applicationId, {
+    this.schemaCache.set(cacheKey, {
       schema,
       expiresAt: now + this.cfg.schemaCacheTtlMs,
     });
@@ -111,10 +154,40 @@ export class SmartSuiteClient {
 
   clearSchemaCache(applicationId?: string): void {
     if (applicationId) {
-      this.schemaCache.delete(applicationId);
+      // Keys are `${accountId}:${applicationId}`; clear this app across any workspace.
+      for (const key of this.schemaCache.keys()) {
+        if (key.endsWith(`:${applicationId}`)) this.schemaCache.delete(key);
+      }
     } else {
       this.schemaCache.clear();
     }
+  }
+
+  // ── Workspaces (accounts) ────────────────────────────────────────────────────
+
+  /** List every workspace the authenticated API key can access (GET /accounts/). */
+  async listAccounts(): Promise<Workspace[]> {
+    const res = await this.request<Workspace[] | { results?: Workspace[]; data?: Workspace[] }>('GET', '/accounts/');
+    if (Array.isArray(res)) return res;
+    return (res as { results?: Workspace[] }).results ?? (res as { data?: Workspace[] }).data ?? [];
+  }
+
+  // ── Automations ──────────────────────────────────────────────────────────────
+
+  /**
+   * List automations for a solution. Automations use the automation-engine RPC
+   * (POST to the host root, not the /api/v1 REST base) and are scoped per solution.
+   */
+  async listAutomations(solutionId: string): Promise<Automation[]> {
+    const origin = new URL(this.cfg.baseUrl).origin;
+    const url = `${origin}/smartsuite.automation_engine.engine.Automations/ListAutomations`;
+    const res = await this.requestUrl<Automation[] | { automations?: Automation[] }>(
+      'POST',
+      url,
+      { solution_id: solutionId },
+    );
+    if (Array.isArray(res)) return res;
+    return (res as { automations?: Automation[] }).automations ?? [];
   }
 
   // ── Solutions ──────────────────────────────────────────────────────────────
@@ -144,8 +217,74 @@ export class SmartSuiteClient {
       ?? [];
   }
 
-  async getApplication(applicationId: string): Promise<ApplicationDetail> {
-    return this.getApplicationSchema(applicationId);
+  async getApplication(
+    applicationId: string,
+    opts: { forceRefresh?: boolean } = {},
+  ): Promise<ApplicationDetail> {
+    return this.getApplicationSchema(applicationId, opts);
+  }
+
+  // ── Fields (schema writes) ───────────────────────────────────────────────────
+
+  /**
+   * Validate a formula expression without persisting anything.
+   * Body wraps a (possibly minimal) field definition; only `params.formula` is
+   * required. Returns `{valid, safe, warnings}` on success. The API returns HTTP
+   * 400 with `{message, code}` for an invalid formula — we translate that into a
+   * structured result instead of throwing so callers can show the message.
+   */
+  async validateFormula(
+    applicationId: string,
+    field: FieldDefinition,
+  ): Promise<{ valid: boolean; safe?: boolean; warnings?: unknown[]; message?: string; code?: string }> {
+    const url = `${this.cfg.baseUrl}/applications/${applicationId}/validate_formula/`;
+    const headers = buildAuthHeaders(this.cfg.apiKey, this.cfg.accountId);
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ field }) });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.ok) {
+      return {
+        valid: json['valid'] === true,
+        safe: json['safe'] as boolean | undefined,
+        warnings: (json['warnings'] as unknown[]) ?? [],
+      };
+    }
+    return {
+      valid: false,
+      message: (json['message'] as string) ?? `Validation failed (HTTP ${res.status})`,
+      code: json['code'] as string | undefined,
+    };
+  }
+
+  /** Add a new field. `prevSiblingSlug` positions it immediately after an existing field. */
+  async addField(
+    applicationId: string,
+    field: FieldDefinition,
+    prevSiblingSlug: string,
+  ): Promise<unknown> {
+    const result = await this.request<unknown>('POST', `/applications/${applicationId}/add_field/`, {
+      field,
+      field_position: { prev_sibling_slug: prevSiblingSlug },
+    });
+    this.clearSchemaCache(applicationId);
+    return result;
+  }
+
+  /** Edit an existing field. Body is the full field definition (not wrapped). */
+  async changeField(applicationId: string, field: FieldDefinition): Promise<unknown> {
+    const result = await this.request<unknown>(
+      'PUT',
+      `/applications/${applicationId}/change_field/?set_is_migrating=1`,
+      field,
+    );
+    this.clearSchemaCache(applicationId);
+    return result;
+  }
+
+  /** Delete a field by slug. */
+  async deleteField(applicationId: string, slug: string): Promise<unknown> {
+    const result = await this.request<unknown>('POST', `/applications/${applicationId}/delete_field/`, { slug });
+    this.clearSchemaCache(applicationId);
+    return result;
   }
 
   // ── Records ────────────────────────────────────────────────────────────────
@@ -247,19 +386,37 @@ export class SmartSuiteClient {
     );
   }
 
-  // ── Views ──────────────────────────────────────────────────────────────────
+  // ── Views & Dashboards (reports) ─────────────────────────────────────────────
 
-  async listViews(applicationId: string): Promise<View[]> {
-    const res = await this.request<View[] | { results?: View[]; data?: View[] }>(
+  /**
+   * List all reports (views + dashboards) for an application.
+   * GET /reports/?application=<id> returns a bare array; each element is a view
+   * or dashboard distinguished by `view_mode`.
+   */
+  async listReports(applicationId: string): Promise<Report[]> {
+    const res = await this.request<Report[] | { results?: Report[]; data?: Report[] }>(
       'GET',
-      `/applications/${applicationId}/views/`,
+      `/reports/?application=${applicationId}`,
     );
     if (Array.isArray(res)) return res;
-    return (res as { results?: View[] }).results ?? (res as { data?: View[] }).data ?? [];
+    return (res as { results?: Report[] }).results ?? (res as { data?: Report[] }).data ?? [];
   }
 
-  async getView(applicationId: string, viewId: string): Promise<ViewDetail> {
-    return this.request<ViewDetail>('GET', `/applications/${applicationId}/views/${viewId}/`);
+  /**
+   * List the widgets on one tab of a dashboard report.
+   * GET /dashboard/widgets/?report=<reportId>&tab=<tabId> returns a bare array.
+   * Each widget's `params` arrives as a JSON-encoded string; we parse it so
+   * consumers get a usable object.
+   */
+  async listDashboardWidgets(reportId: string, tabId: string): Promise<DashboardWidget[]> {
+    const res = await this.request<DashboardWidget[] | { results?: DashboardWidget[]; data?: DashboardWidget[] }>(
+      'GET',
+      `/dashboard/widgets/?report=${reportId}&tab=${tabId}`,
+    );
+    const arr = Array.isArray(res)
+      ? res
+      : ((res as { results?: DashboardWidget[] }).results ?? (res as { data?: DashboardWidget[] }).data ?? []);
+    return arr.map((w) => ({ ...w, params: parseMaybeJson(w.params) }));
   }
 
   // ── Files ──────────────────────────────────────────────────────────────────

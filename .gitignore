@@ -27,3 +27,6 @@ docs/
 # Editor
 .vscode/
 .idea/
+
+# Local agent memory (not for sharing)
+memory/

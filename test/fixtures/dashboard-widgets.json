@@ -1,0 +1,1626 @@
+[
+  {
+    "id": "6a2894f6a779301fa07339b6",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "hero-widget",
+    "name": "Hero",
+    "show_name": false,
+    "width": 4.0,
+    "height": 256.0,
+    "position_x": 0.0,
+    "position_y": 0.0,
+    "params": {
+      "general": {
+        "content": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 6,
+                "id": "qbkc6i3ai4",
+                "collapse": false,
+                "textAlign": null,
+                "indentation": 0
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The freedom to innovate"
+                }
+              ]
+            },
+            {
+              "type": "heading",
+              "attrs": {
+                "level": 2,
+                "id": "qyqrgu0ro8m",
+                "collapse": false,
+                "textAlign": null,
+                "indentation": 0
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Run Your Business"
+                },
+                {
+                  "type": "hard_break"
+                },
+                {
+                  "type": "text",
+                  "marks": [
+                    {
+                      "type": "color",
+                      "attrs": {
+                        "color": "blue"
+                      }
+                    }
+                  ],
+                  "text": "on a Single Platform"
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "attrs": {
+                "textAlign": "left",
+                "size": "medium"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SmartSuite provides a collaborative Work Management platform that enables teams to plan, track and manage any type of workflow."
+                }
+              ]
+            }
+          ]
+        },
+        "image": {
+          "type": "image",
+          "fit": "cover",
+          "url": "",
+          "height": 190
+        }
+      },
+      "style": {
+        "layout": "image_left",
+        "spacing": "30_70",
+        "background": {
+          "type": "color",
+          "color": "#FAFAFA",
+          "fit": "cover"
+        },
+        "background_blur": {
+          "isActive": false,
+          "value": 3
+        },
+        "color_overlay": {
+          "isActive": false,
+          "color": {
+            "color": "#000000",
+            "format": "hex"
+          },
+          "opacity": 40
+        }
+      },
+      "spacing": {
+        "paddings": {
+          "top": "s",
+          "right": "s",
+          "bottom": "s",
+          "left": "s"
+        },
+        "widget_width": "fixed"
+      },
+      "action_buttons": {
+        "items": [],
+        "size": "medium",
+        "alignment": "left"
+      }
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {},
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2894fb5f8fd00d6b1edf62",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "simple-banner-widget",
+    "name": "Simple Banner",
+    "show_name": false,
+    "width": 4.0,
+    "height": 256.0,
+    "position_x": 0.0,
+    "position_y": 384.0,
+    "params": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2,
+              "id": "e4z2v3jelcd",
+              "collapse": false,
+              "textAlign": "center",
+              "indentation": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Welcome to SmartSuite"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "textAlign": "center",
+              "size": "large"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "A short banner description"
+              }
+            ]
+          }
+        ]
+      },
+      "background": {
+        "type": "color",
+        "color": "#3A86FF",
+        "fit": "cover"
+      },
+      "action_buttons": {
+        "items": [],
+        "size": "medium",
+        "alignment": "center"
+      },
+      "spacing": {
+        "padding": "m",
+        "widget_width": "full_width"
+      }
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {},
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a289500a7eb28bbd5fa77ea",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "heading-widget",
+    "name": "Heading",
+    "show_name": false,
+    "width": 4.0,
+    "height": 256.0,
+    "position_x": 0.0,
+    "position_y": 584.0,
+    "params": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "heading",
+            "attrs": {
+              "level": 2,
+              "id": "e4z2v3jelcd",
+              "collapse": false,
+              "textAlign": null,
+              "indentation": 0
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "Welcome to SmartSuite"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "textAlign": "left",
+              "size": "large"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "SmartSuite provides a collaborative Work Management platform that enables teams to plan, track, and manage any workflow."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {},
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895048c41bea1714909d4",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "faq-widget",
+    "name": "FAQ",
+    "show_name": true,
+    "width": 4.0,
+    "height": 256.0,
+    "position_x": 0.0,
+    "position_y": 756.0,
+    "params": {
+      "layout": "one_column",
+      "items": [
+        {
+          "question": "What is SmartSuite?",
+          "answer": {
+            "type": "doc",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "SmartSuite provides a collaborative Work Management platform that enables teams to plan, track and manage any workflow - whether it be a project, an ongoing process or routine everyday tasks."
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "display": "list"
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Got question? We've got answers."
+            }
+          ]
+        }
+      ]
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a28952ddf03c4de0961a313",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "webpage-widget",
+    "name": "Webpage",
+    "show_name": true,
+    "width": 1.0,
+    "height": 256.0,
+    "position_x": 0.0,
+    "position_y": 954.0,
+    "params": {
+      "url": "https://www.drudgereport.com"
+    },
+    "value": {
+      "url": "https://www.drudgereport.com"
+    },
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a289537bef98ad2d54b94a6",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "text-block-widget",
+    "name": "Text Block",
+    "show_name": true,
+    "width": 1.0,
+    "height": 256.0,
+    "position_x": 1.0,
+    "position_y": 954.0,
+    "params": {
+      "content": {
+        "type": "doc",
+        "content": [
+          {
+            "type": "paragraph",
+            "attrs": {
+              "textAlign": "left",
+              "size": "medium"
+            },
+            "content": [
+              {
+                "type": "text",
+                "text": "test"
+              }
+            ]
+          },
+          {
+            "type": "paragraph",
+            "attrs": {
+              "textAlign": "left",
+              "size": "medium"
+            }
+          }
+        ]
+      },
+      "yjs_data": "AQmsibvYDwAHAQtwcm9zZW1pcnJvcgMJcGFyYWdyYXBoBwCsibvYDwAGBACsibvYDwEBdCgArIm72A8ACXRleHRBbGlnbgF3BGxlZnQoAKyJu9gPAARzaXplAXcGbWVkaXVth6yJu9gPAAMJcGFyYWdyYXBoKACsibvYDwUJdGV4dEFsaWduAXcEbGVmdCgArIm72A8FBHNpemUBdwZtZWRpdW2ErIm72A8CA2VzdAA="
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {},
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a28953cfe5abd951c2dae31",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "spacing-widget",
+    "name": "Spacing",
+    "show_name": false,
+    "width": 4.0,
+    "height": 40.0,
+    "position_x": 0.0,
+    "position_y": 1210.0,
+    "params": {},
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "transparent",
+    "description": "",
+    "description_doc": {},
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a289543c3aaa239d6c7c9bf",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "divider-widget",
+    "name": "Divider",
+    "show_name": false,
+    "width": 4.0,
+    "height": 88.0,
+    "position_x": 0.0,
+    "position_y": 1250.0,
+    "params": {
+      "color": "#EDB740",
+      "label": "test"
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {},
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a28955c2e171c19df5b6a0c",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "record-picker-widget",
+    "name": "Record Selector",
+    "show_name": true,
+    "width": 4.0,
+    "height": 128.0,
+    "position_x": 0.0,
+    "position_y": 1338.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "680924f3c847d4ccd9fa97d5",
+      "source": {
+        "id": "680924f3c847d4ccd9fa97d5",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "680924f3c847d4ccd9fa97d5",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "filter": null,
+      "sort": null,
+      "fields_to_display": [
+        "title",
+        "status",
+        "assigned_to"
+      ],
+      "cover_image_field": null,
+      "connected_widgets": [],
+      "allow_users_to_create_records": true,
+      "display_mode": "dropdown"
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895875fee6d71b7a47336",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "record-details-widget",
+    "name": "Record Details",
+    "show_name": true,
+    "width": 4.0,
+    "height": 768.0,
+    "position_x": 0.0,
+    "position_y": 1466.0,
+    "params": {
+      "source": "6a28955c2e171c19df5b6a0c",
+      "fields": [
+        {
+          "slug": "title",
+          "permissions": "edit",
+          "display_field_name": true,
+          "help_text_position": "do_not_display",
+          "column_width": 1,
+          "display_format": "field"
+        },
+        {
+          "slug": "due_date",
+          "permissions": "edit",
+          "display_field_name": true,
+          "help_text_position": "do_not_display",
+          "column_width": 1,
+          "display_format": "field"
+        },
+        {
+          "slug": "status",
+          "permissions": "edit",
+          "display_field_name": true,
+          "help_text_position": "do_not_display",
+          "column_width": 1,
+          "display_format": "field"
+        },
+        {
+          "slug": "description",
+          "permissions": "edit",
+          "display_field_name": true,
+          "help_text_position": "do_not_display",
+          "column_width": 4,
+          "display_format": "field"
+        }
+      ]
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895a766df2cee34787b9b",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "filter-widget",
+    "name": "Filter Widget",
+    "show_name": false,
+    "width": 4.0,
+    "height": 128.0,
+    "position_x": 0.0,
+    "position_y": 2234.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "680924f3c847d4ccd9fa97d5",
+      "source": {
+        "id": "680924f3c847d4ccd9fa97d5",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "680924f3c847d4ccd9fa97d5",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "preset_type": "dynamic",
+      "dynamic_presets": [
+        {
+          "id": "b8a55403-829c-4f9b-98eb-41f3ed0dd7fc",
+          "label": "Assigned To",
+          "field": "assigned_to",
+          "comparison": "has_any_of",
+          "sort_direction": "asc",
+          "allow_change_comparison": true,
+          "selection_mode": "single",
+          "allowed_selections": null,
+          "default_value": null,
+          "selected_values": null
+        },
+        {
+          "id": "7893654f-8a9b-473c-99a5-7fa7f115403f",
+          "label": "Status",
+          "field": "status",
+          "comparison": "is_any_of",
+          "sort_direction": "as_defined",
+          "allow_change_comparison": true,
+          "selection_mode": "single",
+          "allowed_selections": null,
+          "default_value": null,
+          "selected_values": null
+        }
+      ],
+      "connected_widgets": [
+        "6a28955c2e171c19df5b6a0c"
+      ],
+      "enable_search_bar": false,
+      "search_bar_placeholder": "Search records",
+      "show_name": false,
+      "filter_group": {
+        "is_group": true,
+        "operator": "and",
+        "conditions": []
+      }
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895b130f842188c3a8fd2",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "button-row-widget",
+    "name": "Button Row",
+    "show_name": false,
+    "width": 4.0,
+    "height": 56.0,
+    "position_x": 0.0,
+    "position_y": 2362.0,
+    "params": {
+      "buttons": [
+        {
+          "label": "SmartSuite",
+          "action": "link_to_external_url",
+          "open_in": "new_window",
+          "icon": "settings",
+          "url": "https://www.smartsuite.com/",
+          "background_color": "#3A86FF"
+        },
+        {
+          "label": "Features",
+          "action": "link_to_external_url",
+          "open_in": "new_window",
+          "icon": "settings",
+          "url": "https://smartsuite.com/feature-listing",
+          "background_color": "#3A86FF"
+        },
+        {
+          "label": "Workflows",
+          "action": "link_to_external_url",
+          "open_in": "new_window",
+          "icon": "settings",
+          "url": "https://www.smartsuite.com/solutions",
+          "background_color": "#3A86FF"
+        }
+      ],
+      "size": "balanced",
+      "align": "left",
+      "style": "button",
+      "buttons_per_row": "default"
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895bcc62cec8bc52d7fdb",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "comparison-widget",
+    "name": "Comparison Metric",
+    "show_name": true,
+    "width": 1.0,
+    "height": 128.0,
+    "position_x": 0.0,
+    "position_y": 2418.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "680924f3c847d4ccd9fa97d5",
+      "source": {
+        "id": "680924f3c847d4ccd9fa97d5",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "680924f3c847d4ccd9fa97d5",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "field_slug": "title",
+      "function_type": "count",
+      "time_frame": {
+        "date_field": "due_date",
+        "period": "monthly",
+        "window": "last_vs_one_before"
+      },
+      "filter": null,
+      "drill_in": {
+        "sort_window": {
+          "sort": []
+        },
+        "spotlight_window": {
+          "spotlights": [],
+          "by_field_colors": null
+        },
+        "group_by_window": {
+          "collapsed": {},
+          "group": []
+        },
+        "fields_window": {
+          "visible_fields": [
+            "assigned_to",
+            "autonumber",
+            "description",
+            "due_date",
+            "first_created",
+            "last_updated",
+            "comments_count",
+            "priority",
+            "status",
+            "title"
+          ],
+          "fixed_fields_count": 1,
+          "columns_width": {},
+          "collapsed": []
+        },
+        "row_size_window": {
+          "size": "compact",
+          "previous_size": "compact"
+        },
+        "aggregates": {}
+      }
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895c66ce2b61494b5a87f",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "progress-widget",
+    "name": "Progress Metric",
+    "show_name": true,
+    "width": 1.0,
+    "height": 128.0,
+    "position_x": 1.0,
+    "position_y": 2418.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "680924f3c847d4ccd9fa97d5",
+      "source": {
+        "id": "680924f3c847d4ccd9fa97d5",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "680924f3c847d4ccd9fa97d5",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "bar_color": "#3EAC40",
+      "field_slug": "comments_count",
+      "function_type": "sum",
+      "goal": "100.00",
+      "filter": null,
+      "drill_in": {
+        "sort_window": {
+          "sort": []
+        },
+        "spotlight_window": {
+          "spotlights": [],
+          "by_field_colors": null
+        },
+        "group_by_window": {
+          "collapsed": {},
+          "group": []
+        },
+        "fields_window": {
+          "visible_fields": [
+            "assigned_to",
+            "autonumber",
+            "description",
+            "due_date",
+            "first_created",
+            "last_updated",
+            "comments_count",
+            "priority",
+            "status",
+            "title"
+          ],
+          "fixed_fields_count": 1,
+          "columns_width": {},
+          "collapsed": []
+        },
+        "row_size_window": {
+          "size": "compact",
+          "previous_size": "compact"
+        },
+        "aggregates": {}
+      }
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895d29687008731a47354",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "summary-card-widget",
+    "name": "Summary Card",
+    "show_name": true,
+    "width": 1.0,
+    "height": 128.0,
+    "position_x": 2.0,
+    "position_y": 2418.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "660570de53be7cfdf4755755",
+      "source": {
+        "id": "660570de53be7cfdf4755755",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "660570de53be7cfdf4755755",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "field_slug": "title",
+      "function_type": "count",
+      "filter": null,
+      "alignment": "center",
+      "color": "#EDB740",
+      "drill_in": {
+        "sort_window": {
+          "sort": []
+        },
+        "spotlight_window": {
+          "spotlights": [],
+          "by_field_colors": null
+        },
+        "group_by_window": {
+          "collapsed": {},
+          "group": []
+        },
+        "fields_window": {
+          "visible_fields": [
+            "assigned_to",
+            "autonumber",
+            "description",
+            "due_date",
+            "first_created",
+            "last_updated",
+            "comments_count",
+            "priority",
+            "status",
+            "title"
+          ],
+          "fixed_fields_count": 1,
+          "columns_width": {},
+          "collapsed": []
+        },
+        "row_size_window": {
+          "size": "compact",
+          "previous_size": "compact"
+        },
+        "aggregates": {}
+      },
+      "size": "m",
+      "appearance": "modern",
+      "background_color": "#EDB740",
+      "static_value": "123",
+      "mode": "dynamic"
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895e492f4c9c9f2b2cc15",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "list-view-widget",
+    "name": "Grid View",
+    "show_name": true,
+    "width": 2.0,
+    "height": 448.0,
+    "position_x": 0.0,
+    "position_y": 2546.0,
+    "params": {
+      "view_type": "grid",
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "660570de53be7cfdf4755755",
+      "source": {
+        "id": "660570de53be7cfdf4755755",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "660570de53be7cfdf4755755",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "fields_window": {
+        "visible_fields": [
+          "title",
+          "comments_count",
+          "description",
+          "s40ccb3bc7",
+          "s8b0a85e68"
+        ],
+        "fixed_fields_count": 1,
+        "columns_width": {},
+        "collapsed": []
+      },
+      "row_size_window": {
+        "size": "compact",
+        "previous_size": "compact"
+      },
+      "aggregates": {},
+      "group_by_window": {
+        "collapsed": {},
+        "group": [],
+        "max_groups_count": 3
+      },
+      "filter_window": {
+        "filter": {
+          "operator": "and",
+          "fields": []
+        },
+        "new_filters": {
+          "operator": "and",
+          "conditions": []
+        }
+      },
+      "sort_window": {
+        "sort": []
+      },
+      "spotlight_window": {
+        "spotlights": [],
+        "by_field_colors": null
+      },
+      "display_options": {
+        "allow_inline_edit": true,
+        "display_toolbar": true,
+        "allow_open_record": true,
+        "records_limit": {
+          "enabled": true,
+          "limit": 100
+        }
+      },
+      "action_buttons": []
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895f27af31dc88072aa6d",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "card-view-widget",
+    "name": "Card View",
+    "show_name": true,
+    "width": 2.0,
+    "height": 432.0,
+    "position_x": 2.0,
+    "position_y": 2546.0,
+    "params": {
+      "view_type": "card",
+      "source": {
+        "id": "6428631c5ed65e3ad52c6a91",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "6428631c5ed65e3ad52c6a91",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "fields_window": {
+        "visible_fields": [],
+        "fixed_fields_count": 1,
+        "columns_width": {},
+        "collapsed": []
+      },
+      "sort_window": {
+        "sort": []
+      },
+      "filter_window": {
+        "filter": {
+          "operator": "and",
+          "fields": []
+        },
+        "new_filters": {
+          "operator": "and",
+          "conditions": []
+        }
+      },
+      "group_by_window": {
+        "collapsed": {},
+        "group": [],
+        "max_groups_count": 3
+      },
+      "spotlight_window": {
+        "spotlights": [],
+        "by_field_colors": null
+      },
+      "card_size_window": {
+        "size": "s"
+      },
+      "display_options": {
+        "allow_edit": true,
+        "display_toolbar": true,
+        "allow_open_record": true
+      },
+      "cover_window": null,
+      "action_buttons": []
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2895fc83f3abd152fc5696",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "kanban-view-widget",
+    "name": "Kanban View",
+    "show_name": true,
+    "width": 2.0,
+    "height": 432.0,
+    "position_x": 2.0,
+    "position_y": 2978.0,
+    "params": {
+      "source": {
+        "id": "63adf133c06867a495dfbff3",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "63adf133c06867a495dfbff3",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "fields_window": {
+        "visible_fields": [],
+        "fixed_fields_count": 1,
+        "columns_width": {},
+        "collapsed": []
+      },
+      "sort_window": {
+        "sort": []
+      },
+      "filter_window": {
+        "filter": {
+          "operator": "and",
+          "fields": []
+        },
+        "new_filters": {
+          "operator": "and",
+          "conditions": []
+        }
+      },
+      "stack_by_window": {
+        "columnFieldSlug": "assigned_to",
+        "collapsedColumns": [],
+        "columnsValues": [],
+        "swimlaneFieldSlug": null,
+        "collapsedSwimlanes": [],
+        "hideEmptyColumns": false,
+        "hideEmptySwimlanes": false,
+        "collapseAllSwimlanesByDefault": false
+      },
+      "spotlight_window": {
+        "spotlights": [],
+        "by_field_colors": null
+      },
+      "card_size_window": {
+        "size": "s"
+      },
+      "display_options": {
+        "allow_inline_edit": true,
+        "display_toolbar": true,
+        "allow_open_record": true,
+        "records_limit": {
+          "enabled": false,
+          "limit": 100
+        }
+      },
+      "cover_window": null,
+      "action_buttons": []
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2896092e88ccb31c787ba7",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "timeline-view-widget",
+    "name": "Timeline View",
+    "show_name": true,
+    "width": 4.0,
+    "height": 256.0,
+    "position_x": 0.0,
+    "position_y": 3410.0,
+    "params": {
+      "view_type": "timeline",
+      "source": {
+        "id": "6a272c3cd92a2a9cf0de7b5e",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "6a272c3cd92a2a9cf0de7b5e",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "sort_window": {
+        "sort": []
+      },
+      "filter_window": {
+        "filter": {
+          "operator": "and",
+          "fields": []
+        },
+        "new_filters": {
+          "operator": "and",
+          "conditions": []
+        }
+      },
+      "group_by_window": {
+        "collapsed": {},
+        "group": [],
+        "max_groups_count": 3
+      },
+      "spotlight_window": {
+        "spotlights": [],
+        "by_field_colors": null
+      },
+      "display_options": {
+        "allow_edit": true,
+        "display_toolbar": true,
+        "allow_open_record": true,
+        "display_records_list": true
+      },
+      "timeline_window": {
+        "viewMode": "day",
+        "fields": [
+          {
+            "slug": "due_date",
+            "color": {
+              "background": "#B7E3FB",
+              "font": "#2E3538"
+            }
+          }
+        ],
+        "periods": [],
+        "showRecordsList": false
+      },
+      "action_buttons": []
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a28961553fdcc93187a1b18",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "calendar-view-widget",
+    "name": "Calendar View",
+    "show_name": true,
+    "width": 4.0,
+    "height": 768.0,
+    "position_x": 0.0,
+    "position_y": 3666.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "6428631c5ed65e3ad52c6a91",
+      "source": {
+        "id": "6428631c5ed65e3ad52c6a91",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "6428631c5ed65e3ad52c6a91",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "calendar_window": {
+        "fields": [
+          {
+            "slug": "s907baeade",
+            "color": {
+              "background": "#B7E3FB",
+              "font": "#2E3538"
+            }
+          }
+        ],
+        "externalReportsInfo": [],
+        "displayWeekends": true,
+        "showExternalCalendars": null
+      },
+      "group_by_window": {
+        "collapsed": {},
+        "group": [],
+        "max_groups_count": 3
+      },
+      "filter_window": {
+        "filter": {
+          "operator": "and",
+          "fields": []
+        },
+        "new_filters": {
+          "operator": "and",
+          "conditions": []
+        }
+      },
+      "sort_window": {
+        "sort": []
+      },
+      "spotlight_window": {
+        "spotlights": [],
+        "by_field_colors": null
+      },
+      "display_options": {
+        "allow_edit": true,
+        "display_toolbar": true,
+        "allow_open_record": true
+      },
+      "action_buttons": []
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a289672f6fad95493c7ca03",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "pivot-widget",
+    "name": "Pivot Table",
+    "show_name": true,
+    "width": 2.0,
+    "height": 448.0,
+    "position_x": 0.0,
+    "position_y": 4434.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "6428631c5ed65e3ad52c6a91",
+      "source": {
+        "id": "6428631c5ed65e3ad52c6a91",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "6428631c5ed65e3ad52c6a91",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "filter": null,
+      "row": {
+        "field_slug": "s42d9dae58",
+        "sort": {
+          "order": "desc",
+          "by": "value"
+        }
+      },
+      "column": {
+        "field_slug": "s3270d343d",
+        "sort": {
+          "order": "desc",
+          "by": "group"
+        }
+      },
+      "summarize_by": {
+        "field_slug": "",
+        "aggregation": "count"
+      },
+      "drill_in": {
+        "sort_window": {
+          "sort": []
+        },
+        "spotlight_window": {
+          "spotlights": [],
+          "by_field_colors": null
+        },
+        "group_by_window": {
+          "collapsed": {},
+          "group": []
+        },
+        "fields_window": {
+          "visible_fields": [],
+          "fixed_fields_count": 1,
+          "columns_width": {},
+          "collapsed": []
+        },
+        "row_size_window": {
+          "size": "compact",
+          "previous_size": "compact"
+        },
+        "aggregates": {}
+      },
+      "column_widths": null
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a289698681957e57f72aa82",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "chart-widget",
+    "name": "Bar",
+    "show_name": true,
+    "width": 2.0,
+    "height": 448.0,
+    "position_x": 2.0,
+    "position_y": 4434.0,
+    "params": {
+      "chart_type": "bar",
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "application": "6428631c5ed65e3ad52c6a91",
+      "source": {
+        "id": "6428631c5ed65e3ad52c6a91",
+        "solution": "63c4a5e3fbb0b8623735210d",
+        "application": "6428631c5ed65e3ad52c6a91",
+        "source_type": "application",
+        "selected_record": null
+      },
+      "values": [
+        {
+          "id": "7fbf7661-060f-4e54-80d0-9f044a198998",
+          "slug": "s57d389b6d",
+          "color": {
+            "background": "#0C41F3",
+            "font": "#fff"
+          },
+          "aggregation": {
+            "type": "sum",
+            "nested_option": null
+          }
+        }
+      ],
+      "filter": null,
+      "group_by": {
+        "slug": "s42d9dae58",
+        "nested_option": null,
+        "additional_option": null
+      },
+      "categories": [
+        {
+          "slug": null,
+          "nested_option": null,
+          "additional_option": null
+        },
+        {
+          "slug": null,
+          "nested_option": null,
+          "additional_option": null
+        }
+      ],
+      "totals": {
+        "collapsed": true,
+        "values": []
+      },
+      "legends": [],
+      "benchmarks": {
+        "collapsed": true,
+        "values": []
+      },
+      "drill_in": {
+        "sort_window": {
+          "sort": []
+        },
+        "spotlight_window": {
+          "spotlights": [],
+          "by_field_colors": null
+        },
+        "group_by_window": {
+          "collapsed": {},
+          "group": []
+        },
+        "fields_window": {
+          "visible_fields": [
+            "assigned_to",
+            "autonumber",
+            "description",
+            "due_date",
+            "first_created",
+            "last_updated",
+            "comments_count",
+            "priority",
+            "status",
+            "title"
+          ],
+          "fixed_fields_count": 1,
+          "columns_width": {},
+          "collapsed": []
+        },
+        "row_size_window": {
+          "size": "compact",
+          "previous_size": "compact"
+        },
+        "aggregates": {}
+      },
+      "dynamic_filter_field": null,
+      "advanced_options": {
+        "collapsed": true,
+        "value": {
+          "show_dots": false,
+          "show_data_labels": false,
+          "include_empty_values": false
+        }
+      },
+      "custom_sort_applied": false
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2896a5ca682cac6a2d7fc7",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "data-schema-widget",
+    "name": "Data Schema",
+    "show_name": true,
+    "width": 2.0,
+    "height": 384.0,
+    "position_x": 0.0,
+    "position_y": 4882.0,
+    "params": {
+      "solution": "63c4a5e3fbb0b8623735210d",
+      "visible_fields": "linked",
+      "show_links_to_other_solutions": false
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2896bb22900bfb0061a315",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "countdown-widget",
+    "name": "Countdown",
+    "show_name": true,
+    "width": 1.0,
+    "height": 192.0,
+    "position_x": 2.0,
+    "position_y": 4882.0,
+    "params": {
+      "target_date": "2026-06-10T05:00:00Z",
+      "target_time": "2026-06-09T05:00:00Z",
+      "display_units": {
+        "months": false,
+        "weeks": false,
+        "days": true,
+        "hours": true,
+        "minutes": true,
+        "seconds": true
+      },
+      "countdown_color": "#3EAC40",
+      "target_reached": {
+        "style": "fireworks",
+        "text": ""
+      }
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  },
+  {
+    "id": "6a2896c5e0e8bd9aa39ce60f",
+    "report": "6a2894de824820626116e9c6",
+    "widget_type": "world-clock-widget",
+    "name": "World Clock",
+    "show_name": true,
+    "width": 1.0,
+    "height": 320.0,
+    "position_x": 2.0,
+    "position_y": 5074.0,
+    "params": {
+      "cities": [
+        {
+          "timezone_gmt": "GMT-05:00",
+          "timezone_id": "America/Chicago",
+          "timezone_name": "Central Time - Chicago",
+          "sort_order": 0
+        },
+        {
+          "timezone_gmt": "GMT+01:00",
+          "timezone_id": "Europe/London",
+          "timezone_name": "United Kingdom Time",
+          "sort_order": 1
+        },
+        {
+          "timezone_gmt": "GMT+03:00",
+          "timezone_id": "Europe/Moscow",
+          "timezone_name": "Moscow Standard Time - Moscow",
+          "sort_order": 2
+        },
+        {
+          "timezone_gmt": "GMT+09:00",
+          "timezone_id": "Asia/Tokyo",
+          "timezone_name": "Japan Standard Time",
+          "sort_order": 3
+        }
+      ]
+    },
+    "value": null,
+    "collapsed_by_default": false,
+    "color": "#EDB740",
+    "description": "",
+    "description_doc": {
+      "type": "doc",
+      "content": []
+    },
+    "show_description": false,
+    "description_type": "tooltip",
+    "tab": "zwNPWn",
+    "resized": false,
+    "background_color": "#FFFFFF"
+  }
+]

@@ -16,11 +16,13 @@ export async function handleDiagnostics(
       delete: ctx.config.enableDelete,
       schemaWrite: ctx.config.enableSchemaWrite,
       smartdocWrite: ctx.config.enableSmartdocWrite,
+      crossWorkspace: ctx.config.enableCrossWorkspace,
     },
     restrictions: {
       allowedSolutions: ctx.config.allowedSolutions,
       allowedApplications: ctx.config.allowedApplications,
       deniedApplications: ctx.config.deniedApplications,
+      allowedWorkspaces: ctx.config.allowedWorkspaces,
     },
   });
 }

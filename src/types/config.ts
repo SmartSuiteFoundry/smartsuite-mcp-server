@@ -9,6 +9,8 @@ export interface Config {
   allowedSolutions: string[];
   allowedApplications: string[];
   deniedApplications: string[];
+  enableCrossWorkspace: boolean;
+  allowedWorkspaces: string[];
   maxRecords: number;
   maxBatchWrites: number;
   enableDelete: boolean;
