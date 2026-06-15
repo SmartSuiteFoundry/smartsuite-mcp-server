@@ -51,9 +51,6 @@ export async function handleAppendSmartdocContent(
   if (ctx.config.mode === 'readonly') {
     return err('MCP_MODE_BLOCKED', 'Appending SmartDoc content is blocked in readonly mode.');
   }
-  if (!ctx.config.enableSmartdocWrite) {
-    return err('MCP_MODE_BLOCKED', 'SmartDoc writes are disabled. Set SMARTSUITE_ENABLE_SMARTDOC_WRITE=true to enable.');
-  }
 
   const applicationId = args['applicationId'] as string;
   const recordId = args['recordId'] as string;

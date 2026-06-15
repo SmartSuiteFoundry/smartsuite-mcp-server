@@ -15,7 +15,7 @@ export async function handleDiagnostics(
     features: {
       delete: ctx.config.enableDelete,
       schemaWrite: ctx.config.enableSchemaWrite,
-      smartdocWrite: ctx.config.enableSmartdocWrite,
+      smartdocWrite: ctx.config.mode !== 'readonly',
       crossWorkspace: ctx.config.enableCrossWorkspace,
     },
     restrictions: {

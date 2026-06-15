@@ -463,6 +463,116 @@ export const TOOL_DEFINITIONS = [
     annotations: { readOnlyHint: true },
   },
 
+  // ── Forms ──────────────────────────────────────────────────────────────────
+  {
+    name: 'smartsuite_list_forms',
+    description: 'List forms (form-type report views) for a SmartSuite application. Returns each form\'s id, name, description, page count, bound-field count, sharing state, and public form URL (when sharing is enabled). Forms are how external/internal users submit records; in ITSM dashboards they are launched from button-row widgets.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID' },
+      },
+      required: ['applicationId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_describe_form',
+    description: 'Get the full structure of a SmartSuite form for review: settings (title, description, submit label, redirect, branding, logo), sharing (enabled, public URL, password protection), and the page-by-page layout. Each page is an input (form), review, or submission page. Input-page items are parsed into bound fields (slug, label, required, help text) and content elements (heading, html_block/paragraph, callout, consent, divider, image, video, recaptcha, pdf_viewer), including section groupings and conditional-visibility flags.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID' },
+        formId: { type: 'string', description: 'The form (report) ID' },
+      },
+      required: ['applicationId', 'formId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_create_form',
+    description: 'Create a new form for a SmartSuite application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. The label is checked for uniqueness and any supplied field slugs are validated against the application schema first. Without confirm:true returns a dry-run preview; set confirm:true to create. Optionally seed the first input page with fields and set form settings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID the form submits into' },
+        label: { type: 'string', description: 'Form name (must be unique among the application\'s reports)' },
+        fields: {
+          type: 'array',
+          description: 'Optional fields to place on the first input page. Each item is a field slug string, or an object { slug, required, label, helpText }.',
+          items: {
+            oneOf: [
+              { type: 'string' },
+              {
+                type: 'object',
+                properties: {
+                  slug: { type: 'string' },
+                  required: { type: 'boolean' },
+                  label: { type: 'string' },
+                  helpText: { type: 'string' },
+                },
+                required: ['slug'],
+              },
+            ],
+          },
+        },
+        title: { type: 'string', description: 'Form title shown to submitters' },
+        description: { type: 'string', description: 'Form description' },
+        submitLabel: { type: 'string', description: 'Submit button label' },
+        redirectToUrl: { type: 'string', description: 'URL to redirect to after submission' },
+        displaySmartSuiteBranding: { type: 'boolean', description: 'Show SmartSuite branding on the form' },
+        confirm: { type: 'boolean', description: 'Must be true to create. Omit/false for a dry-run preview.' },
+      },
+      required: ['applicationId', 'label'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_form',
+    description: 'Update a form\'s settings and/or structure. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Provide any of: settings (title/description/submitLabel/redirectToUrl/displaySmartSuiteBranding) to merge; `fields` to replace the first input page\'s fields (slugs validated against the schema); or `formState` as a full raw form_state object (advanced escape hatch, replaces everything). Without confirm:true returns a dry-run preview; set confirm:true to apply.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID' },
+        formId: { type: 'string', description: 'The form (report) ID' },
+        fields: {
+          type: 'array',
+          description: 'Replace the first input page\'s fields. Each item is a slug string or { slug, required, label, helpText }.',
+          items: {
+            oneOf: [
+              { type: 'string' },
+              { type: 'object', properties: { slug: { type: 'string' }, required: { type: 'boolean' }, label: { type: 'string' }, helpText: { type: 'string' } }, required: ['slug'] },
+            ],
+          },
+        },
+        formState: { type: 'object', description: 'Advanced: a complete form_state object ({ pages: [...] , ...settings }) that replaces the form structure wholesale. Mutually exclusive with fields.' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        submitLabel: { type: 'string' },
+        redirectToUrl: { type: 'string' },
+        displaySmartSuiteBranding: { type: 'boolean' },
+        confirm: { type: 'boolean', description: 'Must be true to apply. Omit/false for a dry-run preview.' },
+      },
+      required: ['applicationId', 'formId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+
+  {
+    name: 'smartsuite_submit_form',
+    description: 'Submit a SmartSuite form — creates a record through the form\'s submission pipeline, exactly as a user filling out the form would. Two-step: call WITHOUT `values` to get the form\'s input spec (fields to collect, with type and choice hints); then call WITH `values` (keyed by field slug, using normal SmartSuite record value shapes) to submit. Validates that supplied fields are on the form and that required fields are present. Submitting requires readwrite or admin mode (it creates a record).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID the form belongs to' },
+        formId: { type: 'string', description: 'The form (report) ID — from smartsuite_list_forms' },
+        values: { type: 'object', description: 'Field values keyed by slug (same shapes as record create). Omit to preview the form\'s fields first.' },
+      },
+      required: ['applicationId', 'formId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+
   // ── Automations ────────────────────────────────────────────────────────────
   {
     name: 'smartsuite_list_automations',
@@ -488,6 +598,139 @@ export const TOOL_DEFINITIONS = [
       required: ['solutionId', 'automationId'],
     },
     annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_describe_automation_step',
+    description: 'Resolve the full schema of one automation step — its trigger (default) or a chosen action — by calling the automation engine\'s dynamic description. For a trigger: returns label, inputs (with dropdown options), context outputs, the fields the trigger exposes to downstream actions, and the fields usable in conditions. For an action: returns label, integration, and inputs (with options). Use smartsuite_describe_automation first to see the action list; select an action with actionIndex or actionInstanceId.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID' },
+        automationId: { type: 'string', description: 'The automation ID' },
+        step: { type: 'string', enum: ['trigger', 'action'], description: 'Which step to resolve (default trigger).' },
+        actionIndex: { type: 'number', description: 'When step=action: 0-based index across the automation\'s actions (default 0).' },
+        actionInstanceId: { type: 'number', description: 'When step=action: select the action by its action_reference.instance_id instead of index.' },
+      },
+      required: ['solutionId', 'automationId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_get_automation_limits',
+    description: 'Get the workspace\'s automation run usage and plan limit (account-wide). Returns plan category (e.g. enterprise), the automation run limit, runs used, remaining, percent used, and whether the limit is enforced. Use this for "how much of our automation quota are we using?" and plan-type questions.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_list_automation_credentials',
+    description: 'List the integration credentials configured for a solution\'s automations (e.g. Gmail, Slack, Microsoft Teams, webhooks, SmartSuite). Returns each credential\'s id, integration, auth method, and label. Use this to review which external integrations a solution\'s automations connect to.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID' },
+      },
+      required: ['solutionId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_list_solution_members',
+    description: 'List the members available to a solution (id, name, email, job title, status). These are the members automations can assign work to or run as. Also useful for resolving member ids seen in records, assignments, and credentials.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID' },
+      },
+      required: ['solutionId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_create_automation',
+    description: 'Create an automation in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply the trigger (an object with trigger_reference.trigger_id and inputs) and the actions; use smartsuite_describe_automation_step on a similar existing automation to learn the exact trigger/action/input shapes and option values. Pass actions either as the native nested actionGroups ([{actions:{actions:[...]}}]) or as a flat actions array (wrapped into one group automatically). Pass credentialId once to fill it onto the trigger and every action that omits one. automaticDescription (the UI display phrase) and timezone are optional.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID the automation belongs to.' },
+        label: { type: 'string', description: 'Automation name.' },
+        trigger: { type: 'object', description: 'Trigger object: { trigger_reference:{integration_id, trigger_id}, credential_id?, inputs:[...], conditions?:{...} }.' },
+        actionGroups: { type: 'array', description: 'Native action groups: [{actions:{actions:[<action>...]}}]. Mutually exclusive with `actions`.', items: { type: 'object' } },
+        actions: { type: 'array', description: 'Flat list of action objects; wrapped into a single action group. Each: { action_reference:{integration_id, action_id, instance_id}, credential_id?, inputs:[...], record_list?:{...} }.', items: { type: 'object' } },
+        credentialId: { type: 'string', description: 'Optional: fill this credential_id onto the trigger and any action missing one.' },
+        automaticDescription: { type: 'string', description: 'Optional UI display phrase (phrase-builder JSON string). Omit to leave blank.' },
+        timezone: { type: 'string', description: 'Optional IANA timezone (e.g. America/Chicago).' },
+      },
+      required: ['solutionId', 'label', 'trigger'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_automation',
+    description: 'Update an existing automation. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Fetches the current automation and applies only the fields you provide — label, trigger, actionGroups/actions, automaticDescription, timezone — preserving the rest (including first_created). Pass credentialId to fill missing credentials. Note: this replaces the trigger / action groups you supply wholesale (no per-action merge), so pass the complete new trigger or action list.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID the automation belongs to.' },
+        automationId: { type: 'string', description: 'The automation ID to update.' },
+        label: { type: 'string', description: 'New name (optional).' },
+        trigger: { type: 'object', description: 'Replacement trigger object (optional).' },
+        actionGroups: { type: 'array', description: 'Replacement native action groups (optional). Mutually exclusive with `actions`.', items: { type: 'object' } },
+        actions: { type: 'array', description: 'Replacement flat action list, wrapped into one group (optional).', items: { type: 'object' } },
+        credentialId: { type: 'string', description: 'Optional: fill this credential_id onto the trigger and any action missing one.' },
+        automaticDescription: { type: 'string', description: 'New UI display phrase (optional).' },
+        timezone: { type: 'string', description: 'New IANA timezone (optional).' },
+      },
+      required: ['solutionId', 'automationId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_delete_automation',
+    description: 'Delete an automation. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true AND SMARTSUITE_ENABLE_DELETE=true. Without confirm:true it returns a preview of what would be deleted; pass confirm:true to permanently delete. Destructive — cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID the automation belongs to.' },
+        automationId: { type: 'string', description: 'The automation ID to delete.' },
+        confirm: { type: 'boolean', description: 'Must be true to actually delete (default false = preview only).' },
+      },
+      required: ['solutionId', 'automationId'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true },
+  },
+
+  // ── My Work ──────────────────────────────────────────────────────────────────
+  {
+    name: 'smartsuite_list_my_work',
+    description: 'List the authenticated user\'s assigned work ("My Work") — comment mentions, assigned checklist items, and records assigned via people fields — for answering questions like "what\'s on my plate?", "how many open items are overdue?", or "what\'s assigned to me in this solution?". Returns a summary (totals, overdue count, breakdowns by item type / priority / solution) plus the items themselves (with a truncated text preview). Defaults to open items; set status:"resolved" for completed work (which also returns per-period counts).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['open', 'resolved'], description: 'open (default) = unresolved assigned items; resolved = completed items.' },
+        period: { type: 'string', enum: ['today', 'this_week', 'this_month', 'previous_month', 'last_year'], description: 'Optional time bucket filter (most useful with status:resolved).' },
+        solutionId: { type: 'string', description: 'Filter to one solution ID' },
+        applicationId: { type: 'string', description: 'Filter to one application ID' },
+        itemType: { type: 'string', enum: ['comment', 'checklist_item', 'record'], description: 'Filter by item type' },
+        priority: { type: 'string', description: 'Filter by priority value (e.g. "high")' },
+        overdueOnly: { type: 'boolean', description: 'Only items with a due date in the past (open items)' },
+        limit: { type: 'number', description: 'Max items to return (default 50). The summary always reflects the full filtered set.' },
+      },
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_update_my_work',
+    description: 'Update one of the authenticated user\'s My Work items: mark it resolved/open and/or set its due date. Requires readwrite or admin mode. Use smartsuite_list_my_work to find the item id. Returns the updated item.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        itemId: { type: 'string', description: 'The My Work item id (the "id" field from smartsuite_list_my_work)' },
+        status: { type: 'string', enum: ['open', 'resolved'], description: 'Mark the item resolved or reopen it.' },
+        dueDate: { type: ['string', 'null'], description: 'Set the due date (ISO 8601, e.g. "2026-07-01T00:00:00Z"), or null to clear it.' },
+      },
+      required: ['itemId'],
+    },
+    annotations: { readOnlyHint: false },
   },
 
   // ── SmartDocs ──────────────────────────────────────────────────────────────
@@ -542,7 +785,7 @@ export const TOOL_DEFINITIONS = [
 
   {
     name: 'smartsuite_append_smartdoc_content',
-    description: 'Append markdown content to a SmartDoc field. Requires readwrite or admin mode AND SMARTSUITE_ENABLE_SMARTDOC_WRITE=true. Does not replace existing content.',
+    description: 'Append markdown content to a SmartDoc field. Requires readwrite or admin mode. Does not replace existing content.',
     inputSchema: {
       type: 'object',
       properties: {

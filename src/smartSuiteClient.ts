@@ -190,6 +190,92 @@ export class SmartSuiteClient {
     return (res as { automations?: Automation[] }).automations ?? [];
   }
 
+  /** Origin for the engine RPCs (host root, not the /api/v1 REST base). */
+  private get rpcOrigin(): string {
+    return new URL(this.cfg.baseUrl).origin;
+  }
+
+  /**
+   * Account-wide automation run usage and plan, from the limits-engine RPC.
+   * Returns { plan_category, limit, usage, enforceLimit }.
+   */
+  async getLimits(): Promise<{ plan_category?: string; limit?: number; usage?: number; enforceLimit?: boolean }> {
+    return this.requestUrl('POST', `${this.rpcOrigin}/smartsuite.limits_engine.engine.Limits/GetLimits`, {});
+  }
+
+  /** List the integration credentials configured for a solution's automations. */
+  async listAutomationCredentials(solutionId: string): Promise<Array<Record<string, unknown>>> {
+    const res = await this.requestUrl<{ credentials?: Array<Record<string, unknown>> }>(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/ListCredentials`,
+      { solution_id: solutionId },
+    );
+    return res?.credentials ?? [];
+  }
+
+  /** Resolve a trigger's full schema (label, inputs+options, outputs, exposed fields, condition fields). */
+  async describeAutomationTrigger(trigger: unknown, solutionId: string): Promise<Record<string, unknown>> {
+    const res = await this.requestUrl<{ trigger?: Record<string, unknown> }>(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/DynamicTriggerDescription`,
+      { trigger, solution_id: solutionId },
+    );
+    return res?.trigger ?? (res as Record<string, unknown>);
+  }
+
+  /** Resolve an action's full schema (label, inputs+options, authentication). */
+  async describeAutomationAction(action: unknown, solutionId: string): Promise<Record<string, unknown>> {
+    const res = await this.requestUrl<{ action?: Record<string, unknown> }>(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/DynamicActionDescription`,
+      { action, solution_id: solutionId },
+    );
+    return res?.action ?? (res as Record<string, unknown>);
+  }
+
+  /**
+   * Create an automation. Body is `{automation:{solution_id, label, trigger, action_groups, ...}}`.
+   * `automatic_description` and `timezone` are optional (verified 2026-06-14). Returns `{automation_id, first_created}`.
+   */
+  async createAutomation(automation: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.requestUrl(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/CreateAutomation`,
+      { automation },
+    );
+  }
+
+  /**
+   * Update an automation. The body's `automation` must carry `automation_id`, `solution_id`, and the
+   * existing `first_created`, alongside the full trigger + action_groups. Returns `{last_updated, system_status}`.
+   */
+  async updateAutomation(automation: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.requestUrl(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/UpdateAutomation`,
+      { automation },
+    );
+  }
+
+  /** Delete an automation by id (scoped to its solution). Returns `{}` on success. */
+  async deleteAutomation(automationId: string, solutionId: string): Promise<void> {
+    await this.requestUrl(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/DeleteAutomation`,
+      { automation_id: automationId, solution_id: solutionId },
+    );
+  }
+
+  /** List the members available to a solution (used by automations for assignees/credentials). */
+  async listSolutionMembers(solutionId: string): Promise<Array<Record<string, unknown>>> {
+    const res = await this.requestUrl<{ members?: Array<Record<string, unknown>> }>(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/ListSolutionTeamsAndMembers`,
+      { solution_id: solutionId },
+    );
+    return res?.members ?? [];
+  }
+
   // ── Solutions ──────────────────────────────────────────────────────────────
 
   async listSolutions(): Promise<Solution[]> {
@@ -417,6 +503,69 @@ export class SmartSuiteClient {
       ? res
       : ((res as { results?: DashboardWidget[] }).results ?? (res as { data?: DashboardWidget[] }).data ?? []);
     return arr.map((w) => ({ ...w, params: parseMaybeJson(w.params) }));
+  }
+
+  // ── Reports (forms, views, dashboards) ───────────────────────────────────────
+
+  /** Suggest a default (deduped) report label for an application. */
+  async generateReportLabel(applicationId: string, label: string): Promise<string> {
+    const res = await this.request<{ label?: string }>('POST', '/reports/generate_label/', { application: applicationId, label });
+    return res?.label ?? label;
+  }
+
+  /** Check whether a report label is unique within an application. */
+  async validateReportLabel(applicationId: string, label: string): Promise<boolean> {
+    const res = await this.request<{ is_unique?: boolean }>('POST', '/reports/validate_label/', { application: applicationId, label });
+    return res?.is_unique ?? false;
+  }
+
+  /** Create a report. A minimal body ({application, solution, label, view_mode}) is accepted; the server fills defaults. */
+  async createReport(body: Record<string, unknown>): Promise<Report> {
+    return this.request<Report>('POST', '/reports/', body);
+  }
+
+  /** Patch a report (e.g. form_state). Uses return_data=false → empty 200 body. */
+  async updateReport(reportId: string, patch: Record<string, unknown>): Promise<void> {
+    await this.request<void>('PATCH', `/reports/${reportId}/?return_data=false`, patch);
+  }
+
+  /** Delete a report by ID. */
+  async deleteReport(reportId: string): Promise<void> {
+    await this.request<void>('DELETE', `/reports/${reportId}/`);
+  }
+
+  /**
+   * Submit a form — creates a record through the form's submission pipeline
+   * (applying form logic), exactly as a user filling out the form would.
+   * `values` are keyed by field slug, using the same value shapes as record create.
+   */
+  async submitForm(formId: string, values: Record<string, unknown>): Promise<unknown> {
+    return this.request<unknown>('POST', `/forms/internal/${formId}/create_record/`, values);
+  }
+
+  // ── My Work (assigned tasks) ──────────────────────────────────────────────────
+
+  /**
+   * Fetch the authenticated user's My Work items. `resolved=false` (unresolved/open)
+   * returns a bare array; `resolved=true` returns an envelope { items, count } where
+   * `count` holds per-period totals. Both are normalized to { items, count? } here.
+   * `period` (today|this_week|this_month|previous_month|last_year) filters the items.
+   */
+  async getMyWork(
+    resolved: boolean,
+    period?: string,
+  ): Promise<{ items: Array<Record<string, unknown>>; count?: Record<string, number> }> {
+    const path = resolved ? '/my-work/resolved/' : '/my-work/unresolved/';
+    const qs = period ? `?period=${encodeURIComponent(period)}` : '';
+    const res = await this.request<unknown>('GET', `${path}${qs}`);
+    if (Array.isArray(res)) return { items: res as Array<Record<string, unknown>> };
+    const env = (res ?? {}) as { items?: Array<Record<string, unknown>>; count?: Record<string, number> };
+    return { items: env.items ?? [], count: env.count };
+  }
+
+  /** Update a My Work item's status and/or due date. Returns the updated item. */
+  async updateMyWork(itemId: string, patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>('PATCH', `/my-work/${itemId}/`, patch);
   }
 
   // ── Files ──────────────────────────────────────────────────────────────────

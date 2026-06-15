@@ -147,8 +147,7 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `SMARTSUITE_MAX_RECORDS` | `100` | Hard cap for list/query tools |
 | `SMARTSUITE_MAX_BATCH_WRITES` | `25` | Max records per batch update |
 | `SMARTSUITE_ENABLE_DELETE` | `false` | Enable delete tools |
-| `SMARTSUITE_ENABLE_SCHEMA_WRITE` | `false` | Enable schema write tools |
-| `SMARTSUITE_ENABLE_SMARTDOC_WRITE` | `false` | Enable SmartDoc append tools |
+| `SMARTSUITE_ENABLE_SCHEMA_WRITE` | `false` | Enable schema write tools (create/update fields, formulas, forms, and automations) |
 | `SMARTSUITE_ALLOWED_SOLUTIONS` | _(all)_ | Comma-separated solution IDs to allow |
 | `SMARTSUITE_ALLOWED_APPLICATIONS` | _(all)_ | Comma-separated application IDs to allow |
 | `SMARTSUITE_DENIED_APPLICATIONS` | _(none)_ | Comma-separated application IDs to block |
@@ -216,19 +215,43 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `smartsuite_list_dashboards` | List dashboards for an application with their tabs |
 | `smartsuite_describe_dashboard` | Full dashboard config: tabs, branding, style. Pass `includeWidgets: true` to fetch every widget (type, name, position, parsed params) on every tab |
 
+### Forms
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `smartsuite_list_forms` | readonly | List an application's forms with page/field counts, sharing state, and public URL |
+| `smartsuite_describe_form` | readonly | Full form structure: settings, sharing, and the page-by-page layout (bound fields + content elements, sections, conditions) |
+| `smartsuite_create_form` | readwrite + enable_schema_write | Create a form; validates label + field slugs. Dry-run unless `confirm: true` |
+| `smartsuite_update_form` | readwrite + enable_schema_write | Update form settings, fields, or full `formState`. Dry-run unless `confirm: true` |
+| `smartsuite_submit_form` | readwrite | Submit a form — creates a record through the form's pipeline. Call without `values` to preview the fields to fill, then with `values` to submit |
+
 ### Automations
 
 | Tool | Description |
 |------|-------------|
 | `smartsuite_list_automations` | List a solution's automations (id, name, enabled state, trigger, action types). Scoped per solution |
 | `smartsuite_describe_automation` | Full automation config: trigger and all action groups |
+| `smartsuite_describe_automation_step` | Resolve one step's full schema: a trigger (label, inputs+options, exposed fields, condition fields) or a chosen action (label, integration, inputs). Select an action with `actionIndex`/`actionInstanceId` |
+| `smartsuite_get_automation_limits` | Workspace automation run usage and plan: plan category, run limit, used, remaining, percent used, enforced |
+| `smartsuite_list_automation_credentials` | Integration credentials a solution's automations use (Gmail, Slack, Teams, webhooks, …) |
+| `smartsuite_list_solution_members` | Members available to a solution (id, name, email, job title, status) |
+| `smartsuite_create_automation` | Create an automation (trigger + actions). Requires `readwrite`/`admin` + `SMARTSUITE_ENABLE_SCHEMA_WRITE`. Pass actions as native `actionGroups` or a flat `actions` array; `credentialId` fills the credential onto trigger/actions. Build the shapes with `describe_automation_step` on a similar automation |
+| `smartsuite_update_automation` | Update an automation (label, trigger, actions, timezone) — applies only provided fields, preserves the rest. Trigger/actions you supply replace wholesale. Requires schema-write |
+| `smartsuite_delete_automation` | Delete an automation. Requires schema-write **and** `SMARTSUITE_ENABLE_DELETE`. Previews unless `confirm:true`. Destructive |
+
+### My Work
+
+| Tool | Mode | Description |
+|------|------|-------------|
+| `smartsuite_list_my_work` | readonly | List the authenticated user's assigned work (comment mentions, checklist items, assigned records). Returns a summary (totals, overdue count, breakdowns by type/priority/solution) plus items. Filter by `status` (open/resolved), `period`, solution, application, item type, priority, or `overdueOnly` |
+| `smartsuite_update_my_work` | readwrite | Update a My Work item: mark it resolved/open and/or set or clear its due date |
 
 ### SmartDocs
 
 | Tool | Mode | Description |
 |------|------|-------------|
 | `smartsuite_get_smartdoc_content` | readonly | Read a SmartDoc field as plain text and raw value |
-| `smartsuite_append_smartdoc_content` | readwrite + enable_smartdoc_write | Append markdown to a SmartDoc field |
+| `smartsuite_append_smartdoc_content` | readwrite | Append markdown to a SmartDoc field |
 
 ### Files
 
@@ -317,12 +340,14 @@ src/
     applications.ts
     fields.ts
     formulas.ts        Formula analysis, validation, and field create/update
+    forms.ts           Form review, create/update, and submit (form-type reports)
+    mywork.ts          My Work — the authenticated user's assigned items
     records.read.ts
     records.write.ts
     files.ts
     comments.ts
     views.ts
-    automations.ts
+    automations.ts     Automation review, usage/limits, and create/update/delete
     smartdocs.ts
   types/
     config.ts           Config interface

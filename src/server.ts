@@ -40,7 +40,25 @@ import {
   handleListDashboards,
   handleDescribeDashboard,
 } from './tools/views.js';
-import { handleListAutomations, handleDescribeAutomation } from './tools/automations.js';
+import {
+  handleListAutomations,
+  handleDescribeAutomation,
+  handleDescribeAutomationStep,
+  handleGetAutomationLimits,
+  handleListAutomationCredentials,
+  handleListSolutionMembers,
+  handleCreateAutomation,
+  handleUpdateAutomation,
+  handleDeleteAutomation,
+} from './tools/automations.js';
+import {
+  handleListForms,
+  handleDescribeForm,
+  handleCreateForm,
+  handleUpdateForm,
+  handleSubmitForm,
+} from './tools/forms.js';
+import { handleListMyWork, handleUpdateMyWork } from './tools/mywork.js';
 import { handleGetSmartdocContent, handleAppendSmartdocContent } from './tools/smartdocs.js';
 import { handleGetFileUrl, handleUploadFile } from './tools/files.js';
 
@@ -75,6 +93,20 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_describe_dashboard:    handleDescribeDashboard,
   smartsuite_list_automations:      handleListAutomations,
   smartsuite_describe_automation:   handleDescribeAutomation,
+  smartsuite_describe_automation_step: handleDescribeAutomationStep,
+  smartsuite_get_automation_limits: handleGetAutomationLimits,
+  smartsuite_list_automation_credentials: handleListAutomationCredentials,
+  smartsuite_list_solution_members: handleListSolutionMembers,
+  smartsuite_create_automation:     handleCreateAutomation,
+  smartsuite_update_automation:     handleUpdateAutomation,
+  smartsuite_delete_automation:     handleDeleteAutomation,
+  smartsuite_list_my_work:          handleListMyWork,
+  smartsuite_update_my_work:        handleUpdateMyWork,
+  smartsuite_list_forms:            handleListForms,
+  smartsuite_describe_form:         handleDescribeForm,
+  smartsuite_create_form:           handleCreateForm,
+  smartsuite_update_form:           handleUpdateForm,
+  smartsuite_submit_form:           handleSubmitForm,
   smartsuite_get_smartdoc_content:    handleGetSmartdocContent,
   smartsuite_append_smartdoc_content: handleAppendSmartdocContent,
   smartsuite_get_file_url:            handleGetFileUrl,

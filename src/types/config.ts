@@ -15,7 +15,6 @@ export interface Config {
   maxBatchWrites: number;
   enableDelete: boolean;
   enableSchemaWrite: boolean;
-  enableSmartdocWrite: boolean;
   logLevel: LogLevel;
   logFile: string | null;
   requestTimeoutMs: number;
