@@ -1,6 +1,6 @@
 import { Config, LogLevel, McpMode } from './types/config.js';
 
-const SERVER_VERSION = '0.8.0';
+const SERVER_VERSION = '0.9.0';
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
   const val = env[key];
@@ -65,6 +65,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     schemaCacheTtlMs: optionalInt(env, 'SCHEMA_CACHE_TTL_MS', 300000),
     auditIncludeValues: optionalBool(env, 'SMARTSUITE_AUDIT_INCLUDE_VALUES', false),
     aiEnrichedRecords: optionalBool(env, 'SMARTSUITE_AI_ENRICHED_RECORDS', false),
+    migrationDir: optionalString(env, 'SMARTSUITE_MIGRATION_DIR', process.cwd()),
     serverVersion: SERVER_VERSION,
   };
 }

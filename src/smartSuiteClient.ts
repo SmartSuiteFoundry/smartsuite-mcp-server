@@ -346,10 +346,13 @@ export class SmartSuiteClient {
     applicationId: string,
     field: FieldDefinition,
     prevSiblingSlug: string,
+    opts: { autoFillLayout?: boolean } = {},
   ): Promise<unknown> {
     const result = await this.request<unknown>('POST', `/applications/${applicationId}/add_field/`, {
-      field,
+      field: { ...field, is_new: true },
       field_position: { prev_sibling_slug: prevSiblingSlug },
+      // Place the new field in the record-view layout (otherwise it exists but isn't displayed).
+      auto_fill_structure_layout: opts.autoFillLayout !== false,
     });
     this.clearSchemaCache(applicationId);
     return result;
@@ -369,6 +372,17 @@ export class SmartSuiteClient {
   /** Delete a field by slug. */
   async deleteField(applicationId: string, slug: string): Promise<unknown> {
     const result = await this.request<unknown>('POST', `/applications/${applicationId}/delete_field/`, { slug });
+    this.clearSchemaCache(applicationId);
+    return result;
+  }
+
+  /**
+   * Replace an application's record-view layout. PATCH /applications/{id}/ with the full
+   * `structure_layout` (read-modify-write — send the whole object so nothing is dropped).
+   * Returns the updated ApplicationDetail.
+   */
+  async updateApplicationLayout(applicationId: string, structureLayout: unknown): Promise<ApplicationDetail> {
+    const result = await this.request<ApplicationDetail>('PATCH', `/applications/${applicationId}/`, { structure_layout: structureLayout });
     this.clearSchemaCache(applicationId);
     return result;
   }

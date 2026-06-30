@@ -159,6 +159,7 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `SMARTSUITE_RETRY_COUNT` | `2` | Number of retries for rate limits and transient errors |
 | `SCHEMA_CACHE_TTL_MS` | `300000` | Application schema cache TTL (5 min) |
 | `SMARTSUITE_AI_ENRICHED_RECORDS` | `false` | Return field context (label, type, help text, linked field) with every record response |
+| `SMARTSUITE_MIGRATION_DIR` | _(cwd)_ | Base directory for solution-migration project files (mappings/diff/xlsx, under `.smartsuite-migrations/`) |
 
 ---
 
@@ -176,6 +177,9 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `smartsuite_describe_application` | Application schema with field slugs, options, help text, and the record term. Pass `includeLayout: true` for record-view tabs, sections (collapse + visibility conditions), field rows, and field-level display logic |
 | `smartsuite_list_fields` | List fields for an application, with help text |
 | `smartsuite_describe_field` | Detailed field metadata: choice options, help text (+ format), linked-record targets and display format, formula expression + return type, record-title template, auto-number config, and native AI field config |
+| `smartsuite_set_field_help_text` | readwrite + enable_schema_write | Set/modify/clear a field's help text. Accepts markdown (paragraphs, bullet/ordered lists, **bold**/*italic*) → rich `help_doc`; `displayFormat` = `tooltip` or `below_field_name`. Applies asynchronously; dry-run unless `confirm:true` |
+| `smartsuite_create_field` | readwrite + enable_schema_write | Create a field of any type. Supply `fieldType` + `label` and optional sparse `params` (SmartSuite fills type defaults); e.g. `choices` for select/status, `linked_application`+`entries_allowed` for linkedrecord (backlink auto-created). Slug generated, field placed in the layout. Dry-run unless `confirm:true`. (Formulas: use `create_formula_field`) |
+| `smartsuite_update_field` | readwrite + enable_schema_write | Update a field's `label` and/or `params` (shallow-merged patch; other params preserved). Applies asynchronously; dry-run unless `confirm:true` |
 
 ### Formulas
 
@@ -246,6 +250,43 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `smartsuite_list_my_work` | readonly | List the authenticated user's assigned work (comment mentions, checklist items, assigned records). Returns a summary (totals, overdue count, breakdowns by type/priority/solution) plus items. Filter by `status` (open/resolved), `period`, solution, application, item type, priority, or `overdueOnly` |
 | `smartsuite_update_my_work` | readwrite | Update a My Work item: mark it resolved/open and/or set or clear its due date |
 
+### Record-view layout (sections & tabs)
+
+Edit the sections (labeled field groupings) and tabs on an application's record detail view. A section
+groups the fields that follow it (until the next section). **When tabs are enabled the record view
+renders per-tab layouts, so the section tools require `tabId`** — a tab id, `"all"` (every tab), or
+`"top"` (the hidden top-level layout) — and refuse a silent top-level write. When tabs are disabled,
+`tabId` is omitted. All require `readwrite`/`admin` + `SMARTSUITE_ENABLE_SCHEMA_WRITE`, and preview
+unless `confirm:true`.
+
+| Tool | Description |
+|------|-------------|
+| `smartsuite_add_layout_section` | Add a section. Place it after a field with `afterField` (fields after it fall under the section) or append at the end. Optional `description`, `collapsed`, `hidden` |
+| `smartsuite_update_layout_section` | Update a section's `title` / `description` / `collapsed` / `hidden` by its `section__…` slug |
+| `smartsuite_remove_layout_section` | Remove a section by slug. Removes only the grouping — fields under it are preserved |
+| `smartsuite_add_layout_tab` | Add a tab. Enables tabs if off (the first tab mirrors the current layout); optional `description`, `position`, and tab-bar `style` (`basic`/`process`/`journey`) / `align` |
+| `smartsuite_update_layout_tab` | Update a tab's `name` / `description` / `position` by tab id, and/or the tab-bar `style`/`align` |
+| `smartsuite_remove_layout_tab` | Remove a tab by id. Fields stay in the top-level layout; removing the last tab disables tabs |
+| `smartsuite_move_layout_field` | Move/arrange an existing field in the layout — reorder it, or place it under a section (`afterField` = a field slug or a `section__` slug). Tabs-aware (`tabId` required when tabs are on) |
+| `smartsuite_set_field_visibility` | Hide (`hidden:true`) or show (`hidden:false`) a field in the record view via the layout's record-wide `hidden_fields` list. Dry-run unless `confirm:true` |
+| `smartsuite_set_display_logic` | Add/modify/remove display (visibility) logic on a `field`, `section`, or `tab` — show it only when `conditions` (`[{comparison, field, value}]`, combined by `operator`) are met; `clear:true` removes the rule. Dry-run unless `confirm:true` |
+
+### Solution migration (schema diff)
+
+Compare a solution across workspaces and produce a diff package, for promoting lower-environment
+changes up to production. Set your **primary workspace to production (the migration target)** and read
+the lower environment via cross-workspace access (`SMARTSUITE_ENABLE_CROSS_WORKSPACE`). All four are
+read-only against SmartSuite — they only write local files under `SMARTSUITE_MIGRATION_DIR`. The diff
+covers tables, fields, views, and forms in full; dashboards are compared at the report-config level
+(per-widget contents are not yet diffed).
+
+| Tool | Description |
+|------|-------------|
+| `smartsuite_match_solutions` | Match lower→prod solutions by exact name (ids differ across workspaces). Propose, then `confirm:true` (+ `overrides`) to confirm; persists a project mapping file |
+| `smartsuite_match_applications` | For a confirmed solution pair, match its tables by name (table ids *and* slugs both regenerate across workspaces); persists the table-id map |
+| `smartsuite_diff_schemas` | Diff schemas (lower→prod). Fields match by slug; cross-table references remapped and system values ignored, so only real changes surface. `scope:"all"` (default) also diffs views & forms in full and dashboards at the report-config level (matched by name); `scope:"schema"` = tables + fields only. Classifies added/removed/modified with per-property detail + compatible/risky risk; writes `diff.json` |
+| `smartsuite_export_diff` | Render the diff as XLSX (Summary + Detail tabs) alongside the JSON |
+
 ### SmartDocs
 
 | Tool | Mode | Description |
@@ -259,6 +300,7 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 |------|------|-------------|
 | `smartsuite_get_file_url` | readonly | Resolve a file field handle to a signed CDN download URL |
 | `smartsuite_upload_file` | readwrite | Upload a local file to a SmartSuite file field |
+| `smartsuite_move_attachments` | readwrite | Move (or copy) attachments from one file field to another — one record (`recordId`) or all records (`allRecords`). `mode` append/replace; `clearSource` false = copy. Dry-run unless `confirm:true` |
 
 ---
 
@@ -345,10 +387,20 @@ src/
     records.read.ts
     records.write.ts
     files.ts
+    attachments.ts     Move/copy attachments between file fields
     comments.ts
     views.ts
     automations.ts     Automation review, usage/limits, and create/update/delete
+    layout.ts          Record-view layout: sections, tabs, field move, hide/show, display logic
+    migration.ts       Solution migration tools (match, diff, export)
     smartdocs.ts
+  migration/
+    types.ts            Migration mapping + diff data model
+    match.ts            Name-matching (solutions, tables)
+    normalize.ts        System-noise strip + cross-reference remap
+    diff.ts             Schema diff engine (field/table/solution classification)
+    project.ts          Per-project mapping/diff file persistence
+    xlsx.ts             Dependency-free XLSX writer
   types/
     config.ts           Config interface
     smartsuite.ts       SmartSuite API types

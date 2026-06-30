@@ -1,0 +1,29 @@
+import { describe, it, expect } from 'vitest';
+import { TOOL_DEFINITIONS } from '../../src/tools/registry.js';
+
+const names = new Set(TOOL_DEFINITIONS.map((t) => t.name));
+const has = (...tools: string[]) => tools.every((t) => names.has(t));
+
+/**
+ * Capability scoreboard for the internal-user requests. Each entry asserts the MCP tool(s) that back
+ * the capability exist. Gaps fail here until implemented.
+ */
+const CAPABILITIES: Array<{ request: string; tools: string[] }> = [
+  { request: 'Add, modify and delete sections', tools: ['smartsuite_add_layout_section', 'smartsuite_update_layout_section', 'smartsuite_remove_layout_section'] },
+  { request: 'Add, modify and delete tabs', tools: ['smartsuite_add_layout_tab', 'smartsuite_update_layout_tab', 'smartsuite_remove_layout_tab'] },
+  { request: 'Arrange fields within sections', tools: ['smartsuite_move_layout_field'] },
+  { request: 'Rename fields', tools: ['smartsuite_update_field'] },
+  { request: 'Create and update field help descriptions', tools: ['smartsuite_set_field_help_text'] },
+  { request: 'Add field types and change field settings', tools: ['smartsuite_create_field', 'smartsuite_update_field'] },
+  { request: 'Hide/show fields', tools: ['smartsuite_set_field_visibility'] },
+  { request: 'Add/modify/delete display logic (field/section/tab)', tools: ['smartsuite_set_display_logic'] },
+  { request: 'Move attachments from one field to another', tools: ['smartsuite_move_attachments'] },
+];
+
+describe('capability scoreboard (internal requests → backing tools)', () => {
+  for (const cap of CAPABILITIES) {
+    it(`supports: ${cap.request} [${cap.tools.join(', ')}]`, () => {
+      expect(has(...cap.tools), `missing tool(s): ${cap.tools.filter((t) => !names.has(t)).join(', ')}`).toBe(true);
+    });
+  }
+});

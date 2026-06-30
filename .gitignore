@@ -30,3 +30,6 @@ docs/
 
 # Local agent memory (not for sharing)
 memory/
+
+# Solution-migration project output (contains real workspace ids/diffs)
+.smartsuite-migrations/

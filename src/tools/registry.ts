@@ -167,6 +167,55 @@ export const TOOL_DEFINITIONS = [
     },
     annotations: { readOnlyHint: false },
   },
+  {
+    name: 'smartsuite_set_field_help_text',
+    description: 'Set or modify a field\'s help text (any field type). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. helpText is lightweight markdown — paragraphs (blank-line separated), bullet lists (-/*), ordered lists (1.), and inline **bold** / *italic* — converted to SmartSuite\'s rich help_doc. Pass helpText:"" to clear it. displayFormat controls how it shows: "tooltip" (info icon) or "below_field_name". The full field definition is read and rewritten (other params preserved). Applies asynchronously. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The field slug.' },
+        helpText: { type: 'string', description: 'Help text as markdown ("" clears it).' },
+        displayFormat: { type: 'string', enum: ['tooltip', 'below_field_name'], description: 'How the help text is displayed (default tooltip when setting).' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_create_field',
+    description: 'Create a field of any type in an application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply fieldType + label and an OPTIONAL sparse params object; SmartSuite fills type defaults, so most fields need no params. Provide params only where they matter, e.g.: singleselectfield/multipleselectfield/statusfield → {choices:[{label,value}]}; linkedrecordfield → {linked_application:"<app id>", entries_allowed:"single"|"multiple"} (the backlink field is created automatically); numberfield → {precision, separator}; currencyfield → {currency:"USD"}; textfield → {max_length}. (For formula fields use smartsuite_create_formula_field.) The slug is generated and the field is placed in the record-view layout. Dry-run preview unless confirm:true. Use smartsuite_describe_application on a table that already has the desired field type to copy its params shape.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        fieldType: { type: 'string', description: 'SmartSuite field type, e.g. textfield, textareafield, richtextareafield, numberfield, currencyfield, percentfield, datefield, duedatefield, singleselectfield, multipleselectfield, statusfield, yesnofield, linkedrecordfield, userfield, emailfield, phonefield, linkfield, filefield, addressfield, ratingfield, durationfield, timefield, checklistfield, tagsfield, colorpickerfield.' },
+        label: { type: 'string', description: 'Field display label.' },
+        params: { type: 'object', description: 'Optional sparse field params; omit to accept type defaults. See the tool description for which params each type needs.' },
+        afterFieldSlug: { type: 'string', description: 'Optional: place the new field after this field slug (default: end).' },
+        confirm: { type: 'boolean', description: 'Must be true to create (default false = preview).' },
+      },
+      required: ['applicationId', 'fieldType', 'label'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_field',
+    description: 'Update a field\'s label and/or params (any type). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. params is a PATCH — only the keys you pass are changed (shallow-merged onto the existing params); everything else (choices, nested, links) is preserved. Read the field first with smartsuite_describe_field to see current params. Applies asynchronously. Dry-run preview unless confirm:true. (For help text use smartsuite_set_field_help_text; for formula expressions use smartsuite_update_formula_field.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The field slug to update.' },
+        label: { type: 'string', description: 'New label (optional).' },
+        params: { type: 'object', description: 'Optional params patch (shallow-merged onto existing params).' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
 
   // ── Record reads ───────────────────────────────────────────────────────────
   {
@@ -798,5 +847,240 @@ export const TOOL_DEFINITIONS = [
       required: ['applicationId', 'recordId', 'fieldSlug', 'content'],
     },
     annotations: { readOnlyHint: false },
+  },
+
+  // ── Record-view layout (sections) ─────────────────────────────────────────────
+  {
+    name: 'smartsuite_add_layout_section',
+    description: 'Add a section (a labeled grouping) to an application\'s record-view layout. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE. A section groups the fields that follow it (until the next section) in the record detail view. By default edits the top-level layout; pass tabId to edit a specific tab\'s layout when tabs are enabled. Place it after a field with afterField (the section appears just after that field; fields after it fall under the section), or omit to append at the end. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        title: { type: 'string', description: 'Section title.' },
+        description: { type: 'string', description: 'Optional section description (plain text; blank lines start new paragraphs).' },
+        afterField: { type: 'string', description: 'Optional field slug to place the section after (default: append at end).' },
+        collapsed: { type: 'boolean', description: 'Start collapsed (default false).' },
+        hidden: { type: 'boolean', description: 'Hidden section (default false).' },
+        tabId: { type: 'string', description: 'Which layout to edit when tabs are enabled (REQUIRED then): a tab id, "all" for every tab, or "top" for the hidden top-level layout. Omit only when tabs are disabled.' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'title'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_layout_section',
+    description: 'Update an existing record-view layout section (title, description, collapsed, hidden) by its section__… slug. Requires schema-write. Pass description:"" to clear it. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The section slug (section__…).' },
+        title: { type: 'string', description: 'New title.' },
+        description: { type: 'string', description: 'New description (plain text; "" clears it).' },
+        collapsed: { type: 'boolean', description: 'Collapsed state.' },
+        hidden: { type: 'boolean', description: 'Hidden state.' },
+        tabId: { type: 'string', description: 'Which layout to edit when tabs are enabled (REQUIRED then): a tab id, "all" for every tab, or "top" for the hidden top-level layout. Omit only when tabs are disabled.' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_remove_layout_section',
+    description: 'Remove a section from an application\'s record-view layout by its section__… slug. Requires schema-write. Removes only the section grouping; fields that were under it are preserved (they just rejoin the surrounding layout). Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The section slug (section__…) to remove.' },
+        tabId: { type: 'string', description: 'Which layout to edit when tabs are enabled (REQUIRED then): a tab id, "all" for every tab, or "top" for the hidden top-level layout. Omit only when tabs are disabled.' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true },
+  },
+  {
+    name: 'smartsuite_add_layout_tab',
+    description: 'Add a tab to an application\'s record-view layout. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE. Enables tabs if not already on (the first tab mirrors the current top-level layout so existing fields stay visible; later tabs start empty). Optional description, position (0-based; default end), and tab-bar style ("basic"/"process"/"journey") / align (container-level). Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        name: { type: 'string', description: 'Tab name.' },
+        description: { type: 'string', description: 'Optional tab description (plain text).' },
+        position: { type: 'number', description: 'Optional 0-based position (default: append at end).' },
+        style: { type: 'string', enum: ['basic', 'process', 'journey'], description: 'Optional tab-bar style for the whole table.' },
+        align: { type: 'string', description: 'Optional tab-bar alignment (e.g. "left").' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'name'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_layout_tab',
+    description: 'Update a record-view tab (name, description, position) by its tab id, and/or the tab-bar style/align. Requires schema-write. Pass description:"" to clear it. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        tabId: { type: 'string', description: 'The tab id to update.' },
+        name: { type: 'string', description: 'New tab name.' },
+        description: { type: 'string', description: 'New description (plain text; "" clears it).' },
+        position: { type: 'number', description: 'New 0-based position (reorders tabs).' },
+        style: { type: 'string', enum: ['basic', 'process', 'journey'], description: 'Tab-bar style for the whole table.' },
+        align: { type: 'string', description: 'Tab-bar alignment (e.g. "left").' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'tabId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_remove_layout_tab',
+    description: 'Remove a tab from an application\'s record-view layout by its tab id. Requires schema-write. Fields remain in the top-level layout (not deleted). Removing the last tab disables tabs. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        tabId: { type: 'string', description: 'The tab id to remove.' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'tabId'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true },
+  },
+  {
+    name: 'smartsuite_move_layout_field',
+    description: 'Move/arrange an existing field within the record-view layout — reorder it, or place it under a section. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. Pass afterField = the field slug OR a section__ slug to position this field right after it (a field placed right after a section marker becomes the first field under that section); omit afterField to move to the end. In two-column layouts the moved field is re-inserted as its own full-width row. When tabs are enabled, tabId is required (a tab id, "all", or "top"). Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The field slug to move.' },
+        afterField: { type: 'string', description: 'Field slug or section__ slug to place this field after (default: end).' },
+        tabId: { type: 'string', description: 'When tabs are enabled (required then): a tab id, "all", or "top". Omit when tabs are disabled.' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_set_field_visibility',
+    description: 'Hide or show a field in the record view. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. hidden:true hides the field (adds it to the layout\'s record-wide hidden_fields list); hidden:false shows it. Hidden fields stay in the layout structure but aren\'t displayed; this is record-wide (not per-tab). Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The field slug to hide or show.' },
+        hidden: { type: 'boolean', description: 'true = hide the field, false = show it.' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'slug', 'hidden'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_set_display_logic',
+    description: 'Add, modify, or remove display (visibility) logic on a field, section, or tab — show it only when conditions on other fields are met. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. Set target ("field"|"section"|"tab") + targetId (field slug / section__ slug / tab id) and conditions: an array of {comparison, field, value} combined by operator ("and"/"or"); pass clear:true to remove the rule. Example: show the Priority field only when Status is complete → target:"field", targetId:"priority", conditions:[{comparison:"is", field:"status", value:"complete"}]. Common comparisons: is, is_not, is_empty, is_not_empty, contains. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        target: { type: 'string', enum: ['field', 'section', 'tab'], description: 'What the rule controls.' },
+        targetId: { type: 'string', description: 'Field slug, section__ slug, or tab id (matching target).' },
+        operator: { type: 'string', enum: ['and', 'or'], description: 'How multiple conditions combine (default and).' },
+        conditions: { type: 'array', description: 'Conditions: [{comparison, field, value}]. The target shows when these are met.', items: { type: 'object', properties: { comparison: { type: 'string' }, field: { type: 'string', description: 'Slug of the field the condition checks.' }, value: {} }, required: ['comparison', 'field'] } },
+        clear: { type: 'boolean', description: 'Remove the existing rule from the target (ignores conditions).' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'target', 'targetId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+
+  {
+    name: 'smartsuite_move_attachments',
+    description: 'Move attachments (files) from one file field to another. Requires readwrite/admin mode. Copies the source field\'s files into the target field (handles reference existing storage — no re-upload) and clears the source. Target one record with recordId, or every record that has source files with allRecords:true (capped at SMARTSUITE_MAX_RECORDS). mode "append" (default) keeps the target\'s existing files; "replace" overwrites. Set clearSource:false to copy instead of move. Both fields must be filefield type. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        sourceFieldSlug: { type: 'string', description: 'File field slug to move attachments FROM.' },
+        targetFieldSlug: { type: 'string', description: 'File field slug to move attachments TO.' },
+        recordId: { type: 'string', description: 'Move for a single record (omit to use allRecords).' },
+        allRecords: { type: 'boolean', description: 'Move for every record that has source files (capped at SMARTSUITE_MAX_RECORDS).' },
+        mode: { type: 'string', enum: ['append', 'replace'], description: 'append (default) keeps target\'s existing files; replace overwrites the target.' },
+        clearSource: { type: 'boolean', description: 'Clear the source field after copying (default true = move; false = copy).' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'sourceFieldSlug', 'targetFieldSlug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+
+  // ── Solution migration / schema diff ──────────────────────────────────────────
+  {
+    name: 'smartsuite_match_solutions',
+    description: 'Step 1 of solution migration: match solutions in a lower-environment workspace to those in your primary (production) workspace by exact name, since object ids differ across workspaces. Set your primary workspace to production (the migration target). Requires SMARTSUITE_ENABLE_CROSS_WORKSPACE. Without confirm, returns proposed matches (exact / ambiguous / unmatched) for review. Re-call with confirm:true to confirm unambiguous matches, and overrides:[{sourceId,prodId}] to resolve ambiguous/unmatched ones. Persists to a project mapping file.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Migration project name (namespaces the saved mapping/diff files).' },
+        sourceWorkspace: { type: 'string', description: 'The lower-environment workspace slug or name (must be allow-listed and differ from primary).' },
+        nameFilter: { type: 'string', description: 'Optional: only consider source solutions whose name contains this string.' },
+        confirm: { type: 'boolean', description: 'Confirm unambiguous (1:1) name matches. Default false (propose only).' },
+        overrides: { type: 'array', description: 'Manual resolutions: [{sourceId, prodId}] to pin a source solution to a specific prod solution.', items: { type: 'object', properties: { sourceId: { type: 'string' }, prodId: { type: 'string' } }, required: ['sourceId', 'prodId'] } },
+      },
+      required: ['project', 'sourceWorkspace'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_match_applications',
+    description: 'Step 2 of solution migration: for one confirmed solution pair, match its tables (applications) by exact name (table ids AND slugs both regenerate across workspaces, so name is the only handle). Same confirm/overrides flow as match_solutions. Persists the lower→prod table-id map into the project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Migration project name.' },
+        solution: { type: 'string', description: 'Name of a confirmed solution pair (from match_solutions).' },
+        confirm: { type: 'boolean', description: 'Confirm unambiguous table matches. Default false.' },
+        overrides: { type: 'array', description: 'Manual table resolutions: [{sourceId, prodId}].', items: { type: 'object', properties: { sourceId: { type: 'string' }, prodId: { type: 'string' } }, required: ['sourceId', 'prodId'] } },
+      },
+      required: ['project', 'solution'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_diff_schemas',
+    description: 'Step 3 of solution migration: compare table/field schemas (lower → prod) for confirmed mappings and write the diff package. Fields match by slug (stable across cloned workspaces); cross-table references are remapped via the table map and system-generated values are ignored, so only real differences surface. With scope "all" (default) it also diffs views and forms in full and dashboards at the report-config level (matched by name); scope "schema" limits to tables + fields. Classifies added / removed / modified (with per-property detail and compatible/risky risk). Writes diff.json and returns a summary.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Migration project name.' },
+        solution: { type: 'string', description: 'Optional: limit to one confirmed solution (default: all confirmed).' },
+        scope: { type: 'string', enum: ['all', 'schema'], description: 'all (default) = tables, fields, views, forms, dashboards; schema = tables + fields only.' },
+      },
+      required: ['project'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_export_diff',
+    description: 'Step 4 of solution migration: render the project diff as a human-readable XLSX (summary tab + per-change detail) alongside the JSON. Run smartsuite_diff_schemas first. Returns the written file paths.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Migration project name.' },
+        format: { type: 'string', enum: ['xlsx', 'json', 'both'], description: 'Output format (default both).' },
+      },
+      required: ['project'],
+    },
+    annotations: { readOnlyHint: true },
   },
 ] as const;

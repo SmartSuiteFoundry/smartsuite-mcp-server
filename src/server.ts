@@ -14,7 +14,7 @@ import { handleDiagnostics } from './tools/diagnostics.js';
 import { handleListWorkspaces } from './tools/workspaces.js';
 import { handleListSolutions, handleGetSolution } from './tools/solutions.js';
 import { handleListApplications, handleDescribeApplication } from './tools/applications.js';
-import { handleListFields, handleDescribeField } from './tools/fields.js';
+import { handleListFields, handleDescribeField, handleSetFieldHelpText, handleCreateField, handleUpdateField } from './tools/fields.js';
 import {
   handleAnalyzeFormulas,
   handleValidateFormula,
@@ -59,8 +59,26 @@ import {
   handleSubmitForm,
 } from './tools/forms.js';
 import { handleListMyWork, handleUpdateMyWork } from './tools/mywork.js';
+import {
+  handleAddLayoutSection,
+  handleUpdateLayoutSection,
+  handleRemoveLayoutSection,
+  handleAddLayoutTab,
+  handleUpdateLayoutTab,
+  handleRemoveLayoutTab,
+  handleMoveLayoutField,
+  handleSetFieldVisibility,
+  handleSetDisplayLogic,
+} from './tools/layout.js';
+import {
+  handleMatchSolutions,
+  handleMatchApplications,
+  handleDiffSchemas,
+  handleExportDiff,
+} from './tools/migration.js';
 import { handleGetSmartdocContent, handleAppendSmartdocContent } from './tools/smartdocs.js';
 import { handleGetFileUrl, handleUploadFile } from './tools/files.js';
+import { handleMoveAttachments } from './tools/attachments.js';
 
 type ToolHandler = (args: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>;
 
@@ -73,6 +91,9 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_describe_application:  handleDescribeApplication,
   smartsuite_list_fields:           handleListFields,
   smartsuite_describe_field:        handleDescribeField,
+  smartsuite_set_field_help_text:   handleSetFieldHelpText,
+  smartsuite_create_field:          handleCreateField,
+  smartsuite_update_field:          handleUpdateField,
   smartsuite_analyze_formulas:      handleAnalyzeFormulas,
   smartsuite_validate_formula:      handleValidateFormula,
   smartsuite_create_formula_field:  handleCreateFormulaField,
@@ -102,6 +123,19 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_delete_automation:     handleDeleteAutomation,
   smartsuite_list_my_work:          handleListMyWork,
   smartsuite_update_my_work:        handleUpdateMyWork,
+  smartsuite_add_layout_section:    handleAddLayoutSection,
+  smartsuite_update_layout_section: handleUpdateLayoutSection,
+  smartsuite_remove_layout_section: handleRemoveLayoutSection,
+  smartsuite_add_layout_tab:        handleAddLayoutTab,
+  smartsuite_update_layout_tab:     handleUpdateLayoutTab,
+  smartsuite_remove_layout_tab:     handleRemoveLayoutTab,
+  smartsuite_move_layout_field:     handleMoveLayoutField,
+  smartsuite_set_field_visibility:  handleSetFieldVisibility,
+  smartsuite_set_display_logic:     handleSetDisplayLogic,
+  smartsuite_match_solutions:       handleMatchSolutions,
+  smartsuite_match_applications:    handleMatchApplications,
+  smartsuite_diff_schemas:          handleDiffSchemas,
+  smartsuite_export_diff:           handleExportDiff,
   smartsuite_list_forms:            handleListForms,
   smartsuite_describe_form:         handleDescribeForm,
   smartsuite_create_form:           handleCreateForm,
@@ -111,6 +145,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_append_smartdoc_content: handleAppendSmartdocContent,
   smartsuite_get_file_url:            handleGetFileUrl,
   smartsuite_upload_file:             handleUploadFile,
+  smartsuite_move_attachments:        handleMoveAttachments,
 };
 
 /** Tools that mutate data — never allowed to target a non-primary workspace. */
@@ -134,8 +169,8 @@ interface ServerDeps {
 
 export function createServer(deps: ServerDeps) {
   const { config, logger, client } = deps;
-  const ctx: ToolContext = { config, logger, client };
   const resolver = new WorkspaceResolver(client, config, config.schemaCacheTtlMs);
+  const ctx: ToolContext = { config, logger, client, resolver };
 
   const server = new Server(
     { name: 'smartsuite-mcp', version: config.serverVersion },

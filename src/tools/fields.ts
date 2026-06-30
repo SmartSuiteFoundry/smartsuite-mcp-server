@@ -126,3 +126,147 @@ export async function handleDescribeField(
     return { content: [{ type: 'text', text: JSON.stringify({ error: er }, null, 2) }], isError: true };
   }
 }
+
+import { err } from './context.js';
+import { markdownToProseMirror } from '../utils/prosemirror.js';
+
+function schemaWriteGuard(ctx: ToolContext): ToolResult | null {
+  if (ctx.config.mode === 'readonly') {
+    return err('MCP_MODE_BLOCKED', 'Schema writes are blocked in readonly mode. Set SMARTSUITE_MCP_MODE=readwrite or admin.');
+  }
+  if (!ctx.config.enableSchemaWrite) {
+    return err('MCP_MODE_BLOCKED', 'Schema writes are disabled. Set SMARTSUITE_ENABLE_SCHEMA_WRITE=true to edit field help text.');
+  }
+  return null;
+}
+
+/**
+ * Set (or clear) a field's help text. Read-modify-write: fetch the full field definition, set
+ * params.help_doc (markdown → ProseMirror) + help_text_display_format, and PUT it via change_field.
+ * change_field applies asynchronously, so we report the submitted value rather than reading back.
+ */
+export async function handleSetFieldHelpText(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = schemaWriteGuard(ctx);
+  if (blocked) return blocked;
+
+  const applicationId = args['applicationId'] as string;
+  const slug = args['slug'] as string;
+  const helpText = args['helpText'] as string | undefined;
+  const displayFormat = args['displayFormat'] as string | undefined;
+  const confirm = args['confirm'] === true;
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
+  if (!slug) return err('SMARTSUITE_VALIDATION_ERROR', 'slug is required.');
+  if (helpText === undefined && displayFormat === undefined) {
+    return err('SMARTSUITE_VALIDATION_ERROR', 'Provide helpText (markdown; "" clears it) and/or displayFormat.');
+  }
+
+  try {
+    const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
+    const field = (app.structure ?? []).find((f) => f.slug === slug) as (FieldDefinition & Record<string, unknown>) | undefined;
+    if (!field) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" not found in application ${applicationId}.`);
+
+    // Read-modify-write the raw field object so all params (choices, nested, etc.) are preserved.
+    const next = JSON.parse(JSON.stringify(field)) as FieldDefinition & { params: Record<string, unknown> };
+    const helpDoc = helpText !== undefined ? markdownToProseMirror(helpText) : (field.params.help_doc ?? null);
+    next.params.help_doc = helpDoc;
+    if (displayFormat !== undefined) next.params.help_text_display_format = displayFormat;
+    else if (helpDoc && !next.params.help_text_display_format) next.params.help_text_display_format = 'tooltip';
+
+    const preview = { slug, label: field.label, helpText: helpText !== undefined ? (helpText || null) : helpTextOf(field).helpText, displayFormat: next.params.help_text_display_format ?? null };
+    if (!confirm) return ok({ dryRun: true, would: preview, note: 'Re-call with confirm:true to apply.' });
+
+    await ctx.client.changeField(applicationId, next as FieldDefinition);
+    return ok({ updated: true, ...preview, note: 'Submitted. change_field applies asynchronously; re-read the field in a moment to see it reflected.' });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+import { generateFieldSlug } from './formulas.js';
+
+/** Build a field definition envelope (params pass through to SmartSuite, which fills defaults). */
+export function buildFieldDef(slug: string, label: string, fieldType: string, params: Record<string, unknown> = {}): FieldDefinition {
+  return { slug, label, field_type: fieldType, params: params as FieldDefinition['params'] };
+}
+
+/** Shallow-merge a params patch onto existing params (patch keys win; others preserved). */
+export function mergeFieldParams(existing: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+  return { ...existing, ...patch };
+}
+
+function fieldSummary(f: (FieldDefinition & Record<string, unknown>) | undefined): Record<string, unknown> | null {
+  if (!f) return null;
+  return { slug: f.slug, label: f.label, fieldType: f.field_type, paramKeys: Object.keys(f.params ?? {}).sort() };
+}
+
+/**
+ * Create a field of any type. The caller supplies field_type + (optional, sparse) params; SmartSuite
+ * fills type defaults. The tool generates the slug, places the field in the record-view layout, and
+ * re-reads to report the result (add_field returns an empty body). Schema-write gated; dry-run unless confirm.
+ */
+export async function handleCreateField(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = schemaWriteGuard(ctx);
+  if (blocked) return blocked;
+
+  const applicationId = args['applicationId'] as string;
+  const fieldType = args['fieldType'] as string;
+  const label = args['label'] as string;
+  const afterFieldSlug = (args['afterFieldSlug'] as string | undefined) ?? '';
+  const params = (args['params'] && typeof args['params'] === 'object' && !Array.isArray(args['params'])) ? (args['params'] as Record<string, unknown>) : {};
+  const confirm = args['confirm'] === true;
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
+  if (!fieldType?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'fieldType is required (e.g. textfield, numberfield, singleselectfield, linkedrecordfield).');
+  if (!label?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'label is required.');
+
+  const slug = generateFieldSlug();
+  const field = buildFieldDef(slug, label, fieldType, params);
+  try {
+    if (!confirm) {
+      return ok({ dryRun: true, would: { slug, fieldType, label, paramKeys: Object.keys(params).sort(), afterFieldSlug: afterFieldSlug || '(end)' }, note: 'SmartSuite fills type defaults for omitted params. Re-call with confirm:true to create.' });
+    }
+    await ctx.client.addField(applicationId, field, afterFieldSlug);
+    const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
+    const created = (app.structure ?? []).find((f) => f.slug === slug) as (FieldDefinition & Record<string, unknown>) | undefined;
+    return ok({ created: true, slug, field: fieldSummary(created) });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+/**
+ * Update a field: change its label and/or merge a params patch (read-modify-write the full field
+ * definition, then PUT via change_field). Applies asynchronously. Schema-write gated; dry-run unless confirm.
+ */
+export async function handleUpdateField(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = schemaWriteGuard(ctx);
+  if (blocked) return blocked;
+
+  const applicationId = args['applicationId'] as string;
+  const slug = args['slug'] as string;
+  const label = args['label'] as string | undefined;
+  const params = (args['params'] && typeof args['params'] === 'object' && !Array.isArray(args['params'])) ? (args['params'] as Record<string, unknown>) : undefined;
+  const confirm = args['confirm'] === true;
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
+  if (!slug) return err('SMARTSUITE_VALIDATION_ERROR', 'slug is required.');
+  if (label === undefined && params === undefined) {
+    return err('SMARTSUITE_VALIDATION_ERROR', 'Provide label and/or params (a patch of param keys to set) to update.');
+  }
+
+  try {
+    const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
+    const field = (app.structure ?? []).find((f) => f.slug === slug) as (FieldDefinition & Record<string, unknown>) | undefined;
+    if (!field) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" not found in application ${applicationId}.`);
+
+    const next = JSON.parse(JSON.stringify(field)) as Record<string, any>;
+    if (typeof label === 'string') next['label'] = label;
+    if (params) next['params'] = mergeFieldParams(next['params'] ?? {}, params);
+
+    const preview = { slug, label: next['label'], fieldType: next['field_type'], changedParams: params ? Object.keys(params).sort() : [] };
+    if (!confirm) return ok({ dryRun: true, would: preview, note: 'Re-call with confirm:true to apply.' });
+
+    await ctx.client.changeField(applicationId, next as unknown as FieldDefinition);
+    return ok({ updated: true, ...preview, note: 'Submitted. change_field applies asynchronously; re-read the field in a moment to confirm.' });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}

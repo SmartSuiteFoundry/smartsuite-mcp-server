@@ -22,5 +22,6 @@ export interface Config {
   schemaCacheTtlMs: number;
   auditIncludeValues: boolean;
   aiEnrichedRecords: boolean;
+  migrationDir: string;
   serverVersion: string;
 }
