@@ -376,6 +376,25 @@ export class SmartSuiteClient {
     return result;
   }
 
+  /** Restore a soft-deleted field back into an application. POST /applications/{id}/restore_field/ {slug}. */
+  async restoreField(applicationId: string, slug: string): Promise<unknown> {
+    const result = await this.request<unknown>('POST', `/applications/${applicationId}/restore_field/`, { slug });
+    this.clearSchemaCache(applicationId);
+    return result;
+  }
+
+  /** List soft-deleted fields across a solution. POST /applications/deleted_fields/ → bare array of {slug,label,field_type,params}. */
+  async listDeletedFields(solutionId: string): Promise<Array<Record<string, unknown>>> {
+    const res = await this.request<Array<Record<string, unknown>>>('POST', '/applications/deleted_fields/', { solution_id: solutionId });
+    return Array.isArray(res) ? res : [];
+  }
+
+  /** List soft-deleted applications in a solution. POST /applications/deleted_applications/ → bare array. */
+  async listDeletedApplications(solutionId: string): Promise<Array<Record<string, unknown>>> {
+    const res = await this.request<Array<Record<string, unknown>>>('POST', '/applications/deleted_applications/', { solution_id: solutionId });
+    return Array.isArray(res) ? res : [];
+  }
+
   /**
    * Replace an application's record-view layout. PATCH /applications/{id}/ with the full
    * `structure_layout` (read-modify-write — send the whole object so nothing is dropped).
@@ -383,6 +402,13 @@ export class SmartSuiteClient {
    */
   async updateApplicationLayout(applicationId: string, structureLayout: unknown): Promise<ApplicationDetail> {
     const result = await this.request<ApplicationDetail>('PATCH', `/applications/${applicationId}/`, { structure_layout: structureLayout });
+    this.clearSchemaCache(applicationId);
+    return result;
+  }
+
+  /** Update application-level attributes (e.g. name, record_term). PATCH /applications/{id}/. */
+  async updateApplication(applicationId: string, patch: Record<string, unknown>): Promise<ApplicationDetail> {
+    const result = await this.request<ApplicationDetail>('PATCH', `/applications/${applicationId}/`, patch);
     this.clearSchemaCache(applicationId);
     return result;
   }
@@ -438,13 +464,36 @@ export class SmartSuiteClient {
     await this.request<void>('DELETE', `/applications/${applicationId}/records/${recordId}/`);
   }
 
+  /** Restore a soft-deleted record from the trash. POST /applications/{id}/records/{recordId}/restore/. */
+  async restoreRecord(applicationId: string, recordId: string): Promise<SmartSuiteRecord> {
+    return this.request<SmartSuiteRecord>('POST', `/applications/${applicationId}/records/${recordId}/restore/`, {});
+  }
+
+  /**
+   * List soft-deleted records across a solution's trash. POST /deleted-records/paginated/.
+   * Solution-scoped (spans all applications). Returns { count, records, next_cursor }.
+   */
+  async listDeletedRecords(
+    solutionId: string,
+    opts: { pageSize?: number; fields?: string[]; cursor?: string } = {},
+  ): Promise<{ count: number; records: Array<Record<string, unknown>>; next_cursor: string | null }> {
+    const body: Record<string, unknown> = { solution_id: solutionId, page_size: opts.pageSize ?? 100 };
+    if (opts.fields?.length) body['fields'] = opts.fields;
+    if (opts.cursor) body['cursor'] = opts.cursor;
+    return this.request('POST', '/deleted-records/paginated/', body);
+  }
+
   async bulkCreateRecords(
     applicationId: string,
     records: Record<string, unknown>[],
   ): Promise<BulkCreateResponse> {
-    return this.request<BulkCreateResponse>('POST', `/applications/${applicationId}/records/bulk/`, {
+    // The bulk-create endpoint returns a bare array of the created records (not a
+    // {successful_items, failed_items} envelope like bulk-update). Normalize to the envelope.
+    const res = await this.request<BulkCreateResponse | SmartSuiteRecord[]>('POST', `/applications/${applicationId}/records/bulk/`, {
       items: records,
     });
+    if (Array.isArray(res)) return { successful_items: res, failed_items: [] };
+    return { successful_items: res?.successful_items ?? [], failed_items: res?.failed_items ?? [] };
   }
 
   async bulkUpdateRecords(
@@ -519,6 +568,29 @@ export class SmartSuiteClient {
     return arr.map((w) => ({ ...w, params: parseMaybeJson(w.params) }));
   }
 
+  /** Fetch a single dashboard widget by ID. */
+  async getWidget(widgetId: string): Promise<DashboardWidget> {
+    const w = await this.request<DashboardWidget>('GET', `/dashboard/widgets/${widgetId}/`);
+    return { ...w, params: parseMaybeJson(w.params) };
+  }
+
+  /** Create a dashboard widget. `params` may be passed as an object (the server accepts it). */
+  async createWidget(body: Record<string, unknown>): Promise<DashboardWidget> {
+    const w = await this.request<DashboardWidget>('POST', '/dashboard/widgets/', body);
+    return { ...w, params: parseMaybeJson(w.params) };
+  }
+
+  /** Patch a dashboard widget (layout, name, params, etc.). Returns the updated widget. */
+  async updateWidget(widgetId: string, patch: Record<string, unknown>): Promise<DashboardWidget> {
+    const w = await this.request<DashboardWidget>('PATCH', `/dashboard/widgets/${widgetId}/`, patch);
+    return { ...w, params: parseMaybeJson(w.params) };
+  }
+
+  /** Delete a dashboard widget by ID. */
+  async deleteWidget(widgetId: string): Promise<void> {
+    await this.request<void>('DELETE', `/dashboard/widgets/${widgetId}/`);
+  }
+
   // ── Reports (forms, views, dashboards) ───────────────────────────────────────
 
   /** Suggest a default (deduped) report label for an application. */
@@ -536,6 +608,11 @@ export class SmartSuiteClient {
   /** Create a report. A minimal body ({application, solution, label, view_mode}) is accepted; the server fills defaults. */
   async createReport(body: Record<string, unknown>): Promise<Report> {
     return this.request<Report>('POST', '/reports/', body);
+  }
+
+  /** Fetch a single report by ID. */
+  async getReport(reportId: string): Promise<Report> {
+    return this.request<Report>('GET', `/reports/${reportId}/`);
   }
 
   /** Patch a report (e.g. form_state). Uses return_data=false → empty 200 body. */

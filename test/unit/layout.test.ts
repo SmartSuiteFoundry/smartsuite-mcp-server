@@ -3,7 +3,7 @@ import {
   generateSectionSlug, buildSectionDescription,
   addSectionToLayout, updateSectionInLayout, removeSectionFromLayout, sectionsOf,
   generateTabId, addTabToLayout, updateTabInLayout, removeTabFromLayout, tabsOf, tabsEnabled,
-  moveFieldInLayout, rowsOrderOf, setFieldHidden,
+  moveFieldInLayout, moveFieldToTab, rowsOrderOf, setFieldHidden,
   buildVisibilityConditions, setFieldDisplayLogic, setTabDisplayLogic, setSectionDisplayLogic,
 } from '../../src/tools/layout.js';
 
@@ -133,6 +133,37 @@ describe('display logic', () => {
     expect(set.found).toBe(true);
     expect(set.layout.fifty_fifty.sections.find((s: any) => s.slug === 'section__sx').visibility_conditions).toEqual(vc);
     expect(set.layout.tabs.tabs[0].layout.fifty_fifty.sections.find((s: any) => s.slug === 'section__sx').visibility_conditions).toEqual(vc);
+  });
+});
+
+describe('moveFieldToTab (cross-tab)', () => {
+  const tabbed = () => ({
+    mode: 'fifty_fifty',
+    fifty_fifty: { rows: [['title', ''], ['a', 'b']], sections: [] as any[] },
+    tabs: { enabled: true, tabs: [
+      { id: 'A', name: 'A', position: 0, layout: { fifty_fifty: { rows: [['a', '']], sections: [] }, seventy_thirty: { seventy: [], thirty: ['a'], seventy_sections: [], thirty_sections: [] } } },
+      { id: 'B', name: 'B', position: 1, layout: { fifty_fifty: { rows: [['b', '']], sections: [] }, seventy_thirty: { seventy: [], thirty: ['b'], seventy_sections: [], thirty_sections: [] } } },
+      { id: 'C', name: 'C', position: 2, layout: null },
+    ] },
+  });
+
+  it('removes the field from its current tab and adds it to the destination tab', () => {
+    const { layout: out, toTabName } = moveFieldToTab(tabbed() as any, 'a', 'B');
+    expect(toTabName).toBe('B');
+    const A = out.tabs.tabs.find((t: any) => t.id === 'A');
+    const B = out.tabs.tabs.find((t: any) => t.id === 'B');
+    expect(A.layout.fifty_fifty.rows.flat()).not.toContain('a');
+    expect(A.layout.seventy_thirty.thirty).not.toContain('a');
+    expect(B.layout.fifty_fifty.rows.flat()).toContain('a');
+    expect(B.layout.seventy_thirty.thirty).toContain('a');
+  });
+  it('initializes a layout when moving to an empty tab', () => {
+    const { layout: out } = moveFieldToTab(tabbed() as any, 'a', 'C');
+    const C = out.tabs.tabs.find((t: any) => t.id === 'C');
+    expect(C.layout.fifty_fifty.rows).toEqual([['a', '']]);
+  });
+  it('throws for an unknown destination tab', () => {
+    expect(() => moveFieldToTab(tabbed() as any, 'a', 'NOPE')).toThrow(/not found/);
   });
 });
 

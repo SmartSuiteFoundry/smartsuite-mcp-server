@@ -14,6 +14,7 @@ export interface Config {
   maxRecords: number;
   maxBatchWrites: number;
   enableDelete: boolean;
+  enableRestore: boolean;
   enableSchemaWrite: boolean;
   logLevel: LogLevel;
   logFile: string | null;

@@ -12,14 +12,37 @@ function triggerSummary(a: Automation): Record<string, unknown> | null {
   };
 }
 
-function isEnabled(a: Automation): boolean | null {
+/**
+ * Parse the engine-computed `system_status` into a state + human reason. Observed shapes:
+ *   { enabled: "SYSTEM_ENABLED" }                        → enabled
+ *   { pending: { message: "created" | "updated" } }       → pending (async; re-fetch to resolve)
+ *   { disabled: { message: "..." }, error: { ... } }      → disabled, with the reason it won't run
+ * `system_status` is computed by the engine, NOT an input we set — an automation goes disabled when it's
+ * structurally invalid (missing credential, incomplete action, etc.), not because a flag was dropped.
+ */
+export function automationStatus(a: Automation): { state: 'enabled' | 'disabled' | 'pending' | 'unknown'; reason: string | null } {
   const s = a.system_status as unknown;
-  if (s == null) return null;
-  // system_status is an object like { enabled: "SYSTEM_ENABLED" | "SYSTEM_DISABLED" }.
-  const flag = typeof s === 'object' ? (s as Record<string, unknown>)['enabled'] : s;
-  if (typeof flag !== 'string') return null;
-  if (/DISABLED|OFF/i.test(flag)) return false;
-  return /ENABLED|ON|ACTIVE/i.test(flag) ? true : null;
+  if (s == null || typeof s !== 'object') {
+    if (typeof s === 'string' && /ENABLED|ON|ACTIVE/i.test(s)) return { state: 'enabled', reason: null };
+    if (typeof s === 'string' && /DISABLED|OFF/i.test(s)) return { state: 'disabled', reason: null };
+    return { state: 'unknown', reason: null };
+  }
+  const o = s as Record<string, any>;
+  const reasonOf = (v: unknown): string | null =>
+    (v && typeof v === 'object' && typeof (v as any).message === 'string') ? (v as any).message : null;
+  if ('disabled' in o || 'error' in o) return { state: 'disabled', reason: reasonOf(o['error']) ?? reasonOf(o['disabled']) };
+  if ('pending' in o) return { state: 'pending', reason: reasonOf(o['pending']) };
+  if (typeof o['enabled'] === 'string') {
+    return /DISABLED|OFF/i.test(o['enabled']) ? { state: 'disabled', reason: null } : { state: 'enabled', reason: null };
+  }
+  return { state: 'unknown', reason: null };
+}
+
+function isEnabled(a: Automation): boolean | null {
+  const { state } = automationStatus(a);
+  if (state === 'enabled') return true;
+  if (state === 'disabled') return false;
+  return null; // pending / unknown
 }
 
 function actionTypes(a: Automation): string[] {
@@ -44,10 +67,13 @@ function actionTypes(a: Automation): string[] {
 
 function slimAutomation(a: Automation): Record<string, unknown> {
   const actions = actionTypes(a);
+  const status = automationStatus(a);
   return {
     id: a.automation_id,
     name: a.label ?? null,
     enabled: isEnabled(a),
+    status: status.state,
+    ...(status.reason ? { statusReason: status.reason } : {}),
     trigger: triggerSummary(a),
     actionCount: actions.length,
     actionTypes: actions,
@@ -283,6 +309,23 @@ export function injectCredential(
   return a;
 }
 
+/**
+ * The engine validates an automation asynchronously, so right after a write `status` is usually
+ * "pending". Surface a note so the caller re-checks rather than assuming the write settled the state —
+ * and, when already disabled, that the write itself did not "turn it off": it's structurally invalid.
+ */
+function statusNote(summary: Record<string, unknown> | null): Record<string, unknown> {
+  const state = summary?.['status'];
+  if (state === 'pending') {
+    return { note: 'system_status is validated asynchronously and is still "pending". Re-run describe_automation shortly to see the final enabled/disabled state and, if disabled, the reason.' };
+  }
+  if (state === 'disabled') {
+    const reason = summary?.['statusReason'];
+    return { note: `Automation is disabled${reason ? ` because: ${reason}` : ''}. This is the engine rejecting an invalid automation (e.g. missing credential or incomplete action) — not the write clearing an "enabled" flag. Fix the cause; enabled state is computed, not set directly.` };
+  }
+  return {};
+}
+
 /** Re-fetch the automation after a write so the response reflects the saved state. */
 async function fetchSummary(ctx: ToolContext, solutionId: string, automationId: string): Promise<Record<string, unknown> | null> {
   try {
@@ -327,7 +370,7 @@ export async function handleCreateAutomation(
     const res = await ctx.client.createAutomation(payload);
     const automationId = res['automation_id'] as string;
     const summary = automationId ? await fetchSummary(ctx, solutionId, automationId) : null;
-    return ok({ created: true, automationId: automationId ?? null, firstCreated: res['first_created'] ?? null, automation: summary });
+    return ok({ created: true, automationId: automationId ?? null, firstCreated: res['first_created'] ?? null, automation: summary, ...statusNote(summary) });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
@@ -369,7 +412,7 @@ export async function handleUpdateAutomation(
     const payload = injectCredential(core, args['credentialId'] as string | undefined);
     const res = await ctx.client.updateAutomation(payload);
     const summary = await fetchSummary(ctx, solutionId, automationId);
-    return ok({ updated: true, automationId, lastUpdated: res['last_updated'] ?? null, automation: summary });
+    return ok({ updated: true, automationId, lastUpdated: res['last_updated'] ?? null, automation: summary, ...statusNote(summary) });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }

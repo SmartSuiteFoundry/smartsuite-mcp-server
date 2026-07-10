@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { summarizeLimits, flattenActions, normalizeActionGroups, injectCredential } from '../../src/tools/automations.js';
+import { summarizeLimits, flattenActions, normalizeActionGroups, injectCredential, automationStatus } from '../../src/tools/automations.js';
+
+describe('automationStatus', () => {
+  const st = (system_status: unknown) => automationStatus({ system_status } as any);
+  it('reads the enabled state', () => {
+    expect(st({ enabled: 'SYSTEM_ENABLED' })).toEqual({ state: 'enabled', reason: null });
+  });
+  it('reports pending (async validation) right after a write', () => {
+    expect(st({ pending: { message: 'created' } })).toEqual({ state: 'pending', reason: 'created' });
+  });
+  it('surfaces the disabled reason instead of hiding it as null', () => {
+    expect(st({ disabled: { message: 'Trigger credential not found' }, error: { message: 'Trigger credential not found' } }))
+      .toEqual({ state: 'disabled', reason: 'Trigger credential not found' });
+  });
+  it('handles a bare SYSTEM_DISABLED string', () => {
+    expect(st('SYSTEM_DISABLED')).toEqual({ state: 'disabled', reason: null });
+  });
+  it('is unknown when status is absent', () => {
+    expect(st(undefined)).toEqual({ state: 'unknown', reason: null });
+  });
+});
 
 describe('summarizeLimits', () => {
   it('derives remaining and percent used', () => {

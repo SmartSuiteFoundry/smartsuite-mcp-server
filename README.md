@@ -145,8 +145,9 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `SMARTSUITE_BASE_URL` | `https://app.smartsuite.com/api/v1` | API base URL |
 | `SMARTSUITE_MCP_MODE` | `readonly` | Access mode: `readonly`, `readwrite`, `admin` |
 | `SMARTSUITE_MAX_RECORDS` | `100` | Hard cap for list/query tools |
-| `SMARTSUITE_MAX_BATCH_WRITES` | `25` | Max records per batch update |
+| `SMARTSUITE_MAX_BATCH_WRITES` | `25` | Max records per batch create/update |
 | `SMARTSUITE_ENABLE_DELETE` | `false` | Enable delete tools |
+| `SMARTSUITE_ENABLE_RESTORE` | `false` | Enable restoring soft-deleted records from the trash |
 | `SMARTSUITE_ENABLE_SCHEMA_WRITE` | `false` | Enable schema write tools (create/update fields, formulas, forms, and automations) |
 | `SMARTSUITE_ALLOWED_SOLUTIONS` | _(all)_ | Comma-separated solution IDs to allow |
 | `SMARTSUITE_ALLOWED_APPLICATIONS` | _(all)_ | Comma-separated application IDs to allow |
@@ -175,11 +176,13 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `smartsuite_get_solution` | Get solution details |
 | `smartsuite_list_applications` | List applications; pass `solutionId` to filter to one solution. Use `slim: true` to inventory a whole solution cheaply (id, name, slug, solution, fieldCount); `limit` is enforced client-side |
 | `smartsuite_describe_application` | Application schema with field slugs, options, help text, and the record term. Pass `includeLayout: true` for record-view tabs, sections (collapse + visibility conditions), field rows, and field-level display logic |
+| `smartsuite_update_application` | readwrite + enable_schema_write | Rename a table (`name`) and/or change its `recordTerm`. Dry-run unless `confirm:true` |
 | `smartsuite_list_fields` | List fields for an application, with help text |
 | `smartsuite_describe_field` | Detailed field metadata: choice options, help text (+ format), linked-record targets and display format, formula expression + return type, record-title template, auto-number config, and native AI field config |
 | `smartsuite_set_field_help_text` | readwrite + enable_schema_write | Set/modify/clear a field's help text. Accepts markdown (paragraphs, bullet/ordered lists, **bold**/*italic*) → rich `help_doc`; `displayFormat` = `tooltip` or `below_field_name`. Applies asynchronously; dry-run unless `confirm:true` |
-| `smartsuite_create_field` | readwrite + enable_schema_write | Create a field of any type. Supply `fieldType` + `label` and optional sparse `params` (SmartSuite fills type defaults); e.g. `choices` for select/status, `linked_application`+`entries_allowed` for linkedrecord (backlink auto-created). Slug generated, field placed in the layout. Dry-run unless `confirm:true`. (Formulas: use `create_formula_field`) |
-| `smartsuite_update_field` | readwrite + enable_schema_write | Update a field's `label` and/or `params` (shallow-merged patch; other params preserved). Applies asynchronously; dry-run unless `confirm:true` |
+| `smartsuite_create_field` | readwrite + enable_schema_write | Create a field of **any** type — incl. **rollup** (`{linked_field, field_selection, function}`) and **lookup** (`{linked_field, field_selection}`), not just formulas. Sparse `params` (SmartSuite fills defaults); `choices` for select/status (colors auto-assigned so dropdowns render right), `linked_application`+`entries_allowed` for linkedrecord (backlink auto-created). Slug generated, field placed in the layout. Dry-run unless `confirm:true`. (Formulas: use `create_formula_field`) |
+| `smartsuite_update_field` | readwrite + enable_schema_write | Update a field's `label` and/or `params` (shallow-merged patch; other params preserved; select choice colors auto-filled). Applies asynchronously; dry-run unless `confirm:true` |
+| `smartsuite_delete_field` | readwrite + enable_schema_write + enable_delete | Delete a field by slug (system fields refused). E.g. replace a formula with a rollup: create the rollup, delete the formula. Dry-run unless `confirm:true` |
 
 ### Formulas
 
@@ -267,7 +270,7 @@ unless `confirm:true`.
 | `smartsuite_add_layout_tab` | Add a tab. Enables tabs if off (the first tab mirrors the current layout); optional `description`, `position`, and tab-bar `style` (`basic`/`process`/`journey`) / `align` |
 | `smartsuite_update_layout_tab` | Update a tab's `name` / `description` / `position` by tab id, and/or the tab-bar `style`/`align` |
 | `smartsuite_remove_layout_tab` | Remove a tab by id. Fields stay in the top-level layout; removing the last tab disables tabs |
-| `smartsuite_move_layout_field` | Move/arrange an existing field in the layout — reorder it, or place it under a section (`afterField` = a field slug or a `section__` slug). Tabs-aware (`tabId` required when tabs are on) |
+| `smartsuite_move_layout_field` | Move/arrange a field in the layout — reorder it, place it under a section (`afterField` = a field slug or `section__` slug), or move it to another tab (`toTab` = destination tab id). Tabs-aware |
 | `smartsuite_set_field_visibility` | Hide (`hidden:true`) or show (`hidden:false`) a field in the record view via the layout's record-wide `hidden_fields` list. Dry-run unless `confirm:true` |
 | `smartsuite_set_display_logic` | Add/modify/remove display (visibility) logic on a `field`, `section`, or `tab` — show it only when `conditions` (`[{comparison, field, value}]`, combined by `operator`) are met; `clear:true` removes the rule. Dry-run unless `confirm:true` |
 

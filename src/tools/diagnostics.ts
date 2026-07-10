@@ -14,6 +14,7 @@ export async function handleDiagnostics(
     maxBatchWrites: ctx.config.maxBatchWrites,
     features: {
       delete: ctx.config.enableDelete,
+      restore: ctx.config.enableRestore,
       schemaWrite: ctx.config.enableSchemaWrite,
       smartdocWrite: ctx.config.mode !== 'readonly',
       crossWorkspace: ctx.config.enableCrossWorkspace,

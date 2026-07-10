@@ -64,15 +64,16 @@ export async function handleListFields(
   const applicationId = args['applicationId'] as string;
   try {
     const schema = await ctx.client.getApplicationSchema(applicationId);
-    const fields = (schema.structure ?? []).map((f) => ({
-      slug: f.slug,
-      label: f.label,
-      type: f.field_type,
-      required: f.params.required ?? false,
-      primary: f.params.primary ?? false,
-      hidden: f.params.hidden ?? false,
-      ...helpTextOf(f),
-    }));
+    // Token-lean column list: slug/label/type + enum values + link targets, omitting false flags
+    // and help text (use smartsuite_describe_field for those). Cheapest way to learn a table's fields.
+    const fields = (schema.structure ?? []).map((f) => {
+      const item: Record<string, unknown> = { slug: f.slug, label: f.label, type: f.field_type };
+      if (f.params.required) item['required'] = true;
+      if (f.params.primary) item['primary'] = true;
+      if (f.params.choices?.length) item['options'] = f.params.choices.map((c) => ({ value: c.value, label: c.label }));
+      if (f.params.linked_application) item['linkedApplication'] = f.params.linked_application;
+      return item;
+    });
     return ok({ items: fields, count: fields.length });
   } catch (e) {
     const er = toErrorResponse(e);
@@ -189,6 +190,39 @@ export function buildFieldDef(slug: string, label: string, fieldType: string, pa
   return { slug, label, field_type: fieldType, params: params as FieldDefinition['params'] };
 }
 
+const SELECT_FIELD_TYPES = new Set(['singleselectfield', 'multipleselectfield', 'statusfield']);
+/** Single/multi select choices carry a description (`value_help_text`) and numeric value (`weight`); status choices do not. */
+const WEIGHTED_SELECT_TYPES = new Set(['singleselectfield', 'multipleselectfield']);
+/** SmartSuite's default choice-color palette (the sequence new choices cycle through). */
+const CHOICE_PALETTE = [
+  '#0C41F3', '#00B3FA', '#199A27', '#F1273F', '#FF702E', '#FDA80D', '#673DB6', '#CD286A', '#00B2A8', '#2D2D2D',
+  '#3A86FF', '#4ECCFD', '#3EAC40', '#FF5757', '#FF9210', '#FFB938', '#883CD0', '#EC506E', '#17C4C4', '#6A849B',
+];
+
+/**
+ * For select-type fields, normalize every choice to the shape SmartSuite's UI produces, so MCP-created
+ * choices render and behave identically:
+ *  - `value_color` / `value_order` (all select types): a choice with no color renders incorrectly until
+ *    you open field settings and pick one, so we assign colors from the default palette (by position).
+ *  - `value_help_text` (single/multi only): the choice *description* shown in the dropdown; defaults to ''.
+ *  - `weight` (single/multi only): the choice's *numeric value* (used by formulas/rollups); defaults to 1,
+ *    matching the UI. Callers set it per choice to give options distinct numeric values.
+ * Any explicitly-provided value is preserved.
+ */
+export function normalizeChoices(fieldType: string, params: Record<string, unknown>): Record<string, unknown> {
+  if (!SELECT_FIELD_TYPES.has(fieldType) || !Array.isArray(params?.['choices'])) return params;
+  const weighted = WEIGHTED_SELECT_TYPES.has(fieldType);
+  const choices = (params['choices'] as Array<Record<string, unknown>>).map((c, i) => ({
+    ...c,
+    value_color: c['value_color'] ?? CHOICE_PALETTE[i % CHOICE_PALETTE.length],
+    value_order: c['value_order'] ?? i,
+    ...(weighted
+      ? { value_help_text: c['value_help_text'] ?? '', weight: c['weight'] ?? 1 }
+      : {}),
+  }));
+  return { ...params, choices };
+}
+
 /** Shallow-merge a params patch onto existing params (patch keys win; others preserved). */
 export function mergeFieldParams(existing: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
   return { ...existing, ...patch };
@@ -219,7 +253,7 @@ export async function handleCreateField(args: Record<string, unknown>, ctx: Tool
   if (!label?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'label is required.');
 
   const slug = generateFieldSlug();
-  const field = buildFieldDef(slug, label, fieldType, params);
+  const field = buildFieldDef(slug, label, fieldType, normalizeChoices(fieldType, params));
   try {
     if (!confirm) {
       return ok({ dryRun: true, would: { slug, fieldType, label, paramKeys: Object.keys(params).sort(), afterFieldSlug: afterFieldSlug || '(end)' }, note: 'SmartSuite fills type defaults for omitted params. Re-call with confirm:true to create.' });
@@ -259,13 +293,81 @@ export async function handleUpdateField(args: Record<string, unknown>, ctx: Tool
 
     const next = JSON.parse(JSON.stringify(field)) as Record<string, any>;
     if (typeof label === 'string') next['label'] = label;
-    if (params) next['params'] = mergeFieldParams(next['params'] ?? {}, params);
+    if (params) next['params'] = normalizeChoices(next['field_type'], mergeFieldParams(next['params'] ?? {}, params));
 
     const preview = { slug, label: next['label'], fieldType: next['field_type'], changedParams: params ? Object.keys(params).sort() : [] };
     if (!confirm) return ok({ dryRun: true, would: preview, note: 'Re-call with confirm:true to apply.' });
 
     await ctx.client.changeField(applicationId, next as unknown as FieldDefinition);
     return ok({ updated: true, ...preview, note: 'Submitted. change_field applies asynchronously; re-read the field in a moment to confirm.' });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+/**
+ * Delete a field by slug. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE + SMARTSUITE_ENABLE_DELETE.
+ * Dry-run preview unless confirm:true. Destructive — the field and its data are removed.
+ */
+export async function handleDeleteField(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = schemaWriteGuard(ctx);
+  if (blocked) return blocked;
+  if (!ctx.config.enableDelete) {
+    return err('MCP_MODE_BLOCKED', 'Field delete is disabled. Set SMARTSUITE_ENABLE_DELETE=true to enable.');
+  }
+
+  const applicationId = args['applicationId'] as string;
+  const slug = args['slug'] as string;
+  const confirm = args['confirm'] === true;
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
+  if (!slug) return err('SMARTSUITE_VALIDATION_ERROR', 'slug is required.');
+
+  try {
+    const app = await ctx.client.getApplicationSchema(applicationId);
+    const field = (app.structure ?? []).find((f) => f.slug === slug);
+    if (!field) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" not found in application ${applicationId}.`);
+    if (field.params?.system) return err('SMARTSUITE_VALIDATION_ERROR', `Field "${slug}" (${field.label}) is a system field and cannot be deleted.`);
+
+    const info = { slug, label: field.label, fieldType: field.field_type };
+    if (!confirm) return ok({ dryRun: true, wouldDelete: info, note: 'Removes the field and its data. Recoverable via smartsuite_restore_field. Re-call with confirm:true to delete.' });
+    await ctx.client.deleteField(applicationId, slug);
+    return ok({ deleted: true, ...info, restoreHint: 'Recover with smartsuite_restore_field (applicationId + slug).' });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+/** List soft-deleted fields across a solution's trash (read-only). The API returns them solution-wide
+ * without per-application attribution, so results are not app-filtered. */
+export async function handleListDeletedFields(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const solutionId = args['solutionId'] as string;
+  if (!solutionId) return err('SMARTSUITE_VALIDATION_ERROR', 'solutionId is required (deleted fields are listed per solution).');
+  try {
+    const res = await ctx.client.listDeletedFields(solutionId);
+    const items = res.map((f) => ({ slug: f['slug'], label: f['label'], fieldType: f['field_type'] }));
+    return ok({ items, count: items.length, note: 'Restore with smartsuite_restore_field (you must supply the applicationId the field belonged to).' });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+/** Restore a soft-deleted field back into its application. Gated schema-write + confirm. */
+export async function handleRestoreField(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = schemaWriteGuard(ctx);
+  if (blocked) return blocked;
+
+  const applicationId = args['applicationId'] as string;
+  const slug = args['slug'] as string;
+  const confirm = args['confirm'] === true;
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
+  if (!slug) return err('SMARTSUITE_VALIDATION_ERROR', 'slug is required (the deleted field slug, from smartsuite_list_deleted_fields).');
+
+  try {
+    if (!confirm) return ok({ dryRun: true, wouldRestore: { applicationId, slug }, hint: 'Re-call with confirm:true to restore this field.' });
+    await ctx.client.restoreField(applicationId, slug);
+    const app = await ctx.client.getApplicationSchema(applicationId, { forceRefresh: true });
+    const field = (app.structure ?? []).find((f) => f.slug === slug);
+    return ok({ restored: true, field: field ? { slug: field.slug, label: field.label, fieldType: field.field_type } : { slug } });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }

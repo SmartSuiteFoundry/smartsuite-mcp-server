@@ -18,6 +18,17 @@ const CAPABILITIES: Array<{ request: string; tools: string[] }> = [
   { request: 'Hide/show fields', tools: ['smartsuite_set_field_visibility'] },
   { request: 'Add/modify/delete display logic (field/section/tab)', tools: ['smartsuite_set_display_logic'] },
   { request: 'Move attachments from one field to another', tools: ['smartsuite_move_attachments'] },
+  { request: 'Move a field to another tab (cross-tab)', tools: ['smartsuite_move_layout_field'] },
+  { request: 'Rename a table', tools: ['smartsuite_update_application'] },
+  { request: 'Create rollup / lookup fields', tools: ['smartsuite_create_field'] },
+  { request: 'Delete a field', tools: ['smartsuite_delete_field'] },
+  { request: 'Create, modify and delete views', tools: ['smartsuite_create_view', 'smartsuite_update_view', 'smartsuite_delete_view'] },
+  { request: 'Create, modify and delete dashboards', tools: ['smartsuite_create_dashboard', 'smartsuite_update_dashboard', 'smartsuite_delete_dashboard'] },
+  { request: 'Add, configure, lay out and remove dashboard widgets', tools: ['smartsuite_add_dashboard_widget', 'smartsuite_update_dashboard_widget', 'smartsuite_remove_dashboard_widget'] },
+  { request: 'Bulk-create records', tools: ['smartsuite_create_records'] },
+  { request: 'List and restore deleted records', tools: ['smartsuite_list_deleted_records', 'smartsuite_restore_records'] },
+  { request: 'List and restore deleted fields', tools: ['smartsuite_list_deleted_fields', 'smartsuite_restore_field'] },
+  { request: 'List deleted applications', tools: ['smartsuite_list_deleted_applications'] },
 ];
 
 describe('capability scoreboard (internal requests → backing tools)', () => {

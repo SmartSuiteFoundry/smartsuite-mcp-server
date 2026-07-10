@@ -1,6 +1,6 @@
 import { Config, LogLevel, McpMode } from './types/config.js';
 
-const SERVER_VERSION = '0.9.0';
+const SERVER_VERSION = '0.9.5';
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
   const val = env[key];
@@ -57,6 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     maxRecords: optionalInt(env, 'SMARTSUITE_MAX_RECORDS', 100),
     maxBatchWrites: optionalInt(env, 'SMARTSUITE_MAX_BATCH_WRITES', 25),
     enableDelete: optionalBool(env, 'SMARTSUITE_ENABLE_DELETE', false),
+    enableRestore: optionalBool(env, 'SMARTSUITE_ENABLE_RESTORE', false),
     enableSchemaWrite: optionalBool(env, 'SMARTSUITE_ENABLE_SCHEMA_WRITE', false),
     logLevel: parseLogLevel(optionalString(env, 'SMARTSUITE_LOG_LEVEL', 'info')),
     logFile: env['SMARTSUITE_LOG_FILE'] || null,

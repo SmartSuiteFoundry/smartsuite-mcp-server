@@ -13,8 +13,8 @@ import { WorkspaceResolver } from './workspaces.js';
 import { handleDiagnostics } from './tools/diagnostics.js';
 import { handleListWorkspaces } from './tools/workspaces.js';
 import { handleListSolutions, handleGetSolution } from './tools/solutions.js';
-import { handleListApplications, handleDescribeApplication } from './tools/applications.js';
-import { handleListFields, handleDescribeField, handleSetFieldHelpText, handleCreateField, handleUpdateField } from './tools/fields.js';
+import { handleListApplications, handleDescribeApplication, handleUpdateApplication, handleListDeletedApplications } from './tools/applications.js';
+import { handleListFields, handleDescribeField, handleSetFieldHelpText, handleCreateField, handleUpdateField, handleDeleteField, handleListDeletedFields, handleRestoreField } from './tools/fields.js';
 import {
   handleAnalyzeFormulas,
   handleValidateFormula,
@@ -26,12 +26,15 @@ import {
   handleGetRecord,
   handleSearchRecords,
   handleQueryRecords,
+  handleListDeletedRecords,
 } from './tools/records.read.js';
 import {
   handleCreateRecord,
+  handleCreateRecords,
   handleUpdateRecord,
   handleUpdateRecords,
   handleDeleteRecords,
+  handleRestoreRecords,
 } from './tools/records.write.js';
 import { handleListComments, handleCreateComment } from './tools/comments.js';
 import {
@@ -40,6 +43,15 @@ import {
   handleListDashboards,
   handleDescribeDashboard,
 } from './tools/views.js';
+import { handleCreateView, handleUpdateView, handleDeleteView } from './tools/views.write.js';
+import {
+  handleCreateDashboard,
+  handleUpdateDashboard,
+  handleDeleteDashboard,
+  handleAddDashboardWidget,
+  handleUpdateDashboardWidget,
+  handleRemoveDashboardWidget,
+} from './tools/dashboards.write.js';
 import {
   handleListAutomations,
   handleDescribeAutomation,
@@ -89,11 +101,16 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_get_solution:          handleGetSolution,
   smartsuite_list_applications:     handleListApplications,
   smartsuite_describe_application:  handleDescribeApplication,
+  smartsuite_update_application:    handleUpdateApplication,
   smartsuite_list_fields:           handleListFields,
   smartsuite_describe_field:        handleDescribeField,
   smartsuite_set_field_help_text:   handleSetFieldHelpText,
   smartsuite_create_field:          handleCreateField,
   smartsuite_update_field:          handleUpdateField,
+  smartsuite_delete_field:          handleDeleteField,
+  smartsuite_list_deleted_fields:   handleListDeletedFields,
+  smartsuite_restore_field:         handleRestoreField,
+  smartsuite_list_deleted_applications: handleListDeletedApplications,
   smartsuite_analyze_formulas:      handleAnalyzeFormulas,
   smartsuite_validate_formula:      handleValidateFormula,
   smartsuite_create_formula_field:  handleCreateFormulaField,
@@ -103,15 +120,27 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_search_records:        handleSearchRecords,
   smartsuite_query_records:         handleQueryRecords,
   smartsuite_create_record:         handleCreateRecord,
+  smartsuite_create_records:        handleCreateRecords,
   smartsuite_update_record:         handleUpdateRecord,
   smartsuite_update_records:        handleUpdateRecords,
   smartsuite_delete_records:        handleDeleteRecords,
+  smartsuite_restore_records:       handleRestoreRecords,
+  smartsuite_list_deleted_records:  handleListDeletedRecords,
   smartsuite_list_comments:         handleListComments,
   smartsuite_create_comment:        handleCreateComment,
   smartsuite_list_views:            handleListViews,
   smartsuite_describe_view:         handleDescribeView,
   smartsuite_list_dashboards:       handleListDashboards,
   smartsuite_describe_dashboard:    handleDescribeDashboard,
+  smartsuite_create_view:           handleCreateView,
+  smartsuite_update_view:           handleUpdateView,
+  smartsuite_delete_view:           handleDeleteView,
+  smartsuite_create_dashboard:      handleCreateDashboard,
+  smartsuite_update_dashboard:      handleUpdateDashboard,
+  smartsuite_delete_dashboard:      handleDeleteDashboard,
+  smartsuite_add_dashboard_widget:    handleAddDashboardWidget,
+  smartsuite_update_dashboard_widget: handleUpdateDashboardWidget,
+  smartsuite_remove_dashboard_widget: handleRemoveDashboardWidget,
   smartsuite_list_automations:      handleListAutomations,
   smartsuite_describe_automation:   handleDescribeAutomation,
   smartsuite_describe_automation_step: handleDescribeAutomationStep,

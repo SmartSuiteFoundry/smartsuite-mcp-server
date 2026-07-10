@@ -62,16 +62,33 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_describe_application',
-    description: 'Describe a SmartSuite application schema, including field slugs, types, and options, plus the record term (custom record terminology). Always call this before creating or updating records so you know field slugs and valid values. Set includeLayout:true to also return the record-view layout (sections with collapse flags, and the field row arrangement of the active layout mode).',
+    description: 'Describe a SmartSuite application schema, including field slugs, types, and options, plus the record term (custom record terminology). Always call this before creating or updating records so you know field slugs and valid values. Set includeLayout:true to also return the record-view layout (sections with collapse flags, and the field row arrangement of the active layout mode). TOKEN COST: the schema is large; a full table is ~1k+ tokens. The schema is STABLE within a session — call this once per table and reuse the result; do NOT re-describe the same application (use forceRefresh only after you change the schema). When you only need field slugs/types/choices (e.g. to build or query records), use verbosity:"compact" or the lighter smartsuite_list_fields instead of the default.',
     inputSchema: {
       type: 'object',
       properties: {
         applicationId: { type: 'string', description: 'The application ID' },
         includeFields: { type: 'boolean', description: 'Include field definitions (default true)' },
+        verbosity: {
+          type: 'string',
+          enum: ['compact', 'standard', 'full'],
+          description: 'Field detail level. "compact" = slug/label/type + choice options + linked-app only (cheapest; use for surveys, CSV/data work, or when scanning many tables). "standard" (default) also adds help text and flags when set. "full" adds the raw params blob (large — only when you need every setting).',
+        },
         includeLayout: { type: 'boolean', description: 'Include the record-view layout: { mode, sections (with collapsed flags), rows, hiddenFields }. Default false.' },
-        forceRefresh: { type: 'boolean', description: 'Bypass cache and fetch fresh schema' },
+        forceRefresh: { type: 'boolean', description: 'Bypass cache and fetch fresh schema. Only needed after the schema changed this session — otherwise redundant.' },
       },
       required: ['applicationId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_list_deleted_applications',
+    description: 'List soft-deleted applications (tables) in a solution\'s trash (read-only). Returns id, name, and recordTerm for each. Note: SmartSuite exposes no public endpoint to restore a deleted application, so this is listing only (restore a table from the SmartSuite UI).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID whose deleted applications to list.' },
+      },
+      required: ['solutionId'],
     },
     annotations: { readOnlyHint: true },
   },
@@ -79,7 +96,7 @@ export const TOOL_DEFINITIONS = [
   // ── Fields ─────────────────────────────────────────────────────────────────
   {
     name: 'smartsuite_list_fields',
-    description: 'List all fields for a SmartSuite application.',
+    description: 'List a SmartSuite application\'s fields as a token-lean column list: slug, label, type, choice options (value+label), and linked-app targets — omitting help text and false flags. Cheapest way to learn a table\'s fields; prefer this over smartsuite_describe_application when you just need field slugs/types/choices and not the record layout or help text. The result is stable within a session — call once per table and reuse it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -185,7 +202,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_field',
-    description: 'Create a field of any type in an application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply fieldType + label and an OPTIONAL sparse params object; SmartSuite fills type defaults, so most fields need no params. Provide params only where they matter, e.g.: singleselectfield/multipleselectfield/statusfield → {choices:[{label,value}]}; linkedrecordfield → {linked_application:"<app id>", entries_allowed:"single"|"multiple"} (the backlink field is created automatically); numberfield → {precision, separator}; currencyfield → {currency:"USD"}; textfield → {max_length}. (For formula fields use smartsuite_create_formula_field.) The slug is generated and the field is placed in the record-view layout. Dry-run preview unless confirm:true. Use smartsuite_describe_application on a table that already has the desired field type to copy its params shape.',
+    description: 'Create a field of any type in an application (including rollup and lookup fields — not just formulas). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply fieldType + label and an OPTIONAL sparse params object; SmartSuite fills type defaults, so most fields need no params. Provide params only where they matter, e.g.: singleselectfield/multipleselectfield/statusfield → {choices:[{label, value_help_text?, weight?}]} where value_help_text is the option DESCRIPTION shown in the dropdown and weight is its NUMERIC value (used by formulas/rollups); e.g. {choices:[{label:"High", value_help_text:"Ship this week", weight:3}]}. Choice colors and order are auto-assigned if omitted so the dropdown renders correctly (status choices take no weight/description); linkedrecordfield → {linked_application:"<app id>", entries_allowed:"single"|"multiple"} (backlink auto-created); rollupfield → {linked_field:"<linkedrecord field slug in THIS table>", field_selection:"<field slug in the LINKED table>", function:"sum"|"count"|"min"|"max"|"average"|"concatenate"|...}; lookupfield → {linked_field, field_selection}; numberfield → {precision, separator}; currencyfield → {currency:"USD"}; textfield → {max_length}. (For formula fields use smartsuite_create_formula_field.) The slug is generated and the field is placed in the record-view layout. Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -202,15 +219,55 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_update_field',
-    description: 'Update a field\'s label and/or params (any type). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. params is a PATCH — only the keys you pass are changed (shallow-merged onto the existing params); everything else (choices, nested, links) is preserved. Read the field first with smartsuite_describe_field to see current params. Applies asynchronously. Dry-run preview unless confirm:true. (For help text use smartsuite_set_field_help_text; for formula expressions use smartsuite_update_formula_field.)',
+    description: 'Update a field\'s label and/or params (any type). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. params is a PATCH — only the keys you pass are changed (shallow-merged onto the existing params); everything else (choices, nested, links) is preserved. Read the field first with smartsuite_describe_field to see current params. Note: choices is replaced wholesale, not merged — to edit select options pass the FULL choices array (each choice may set value_help_text=description and weight=numeric value; colors auto-assigned if omitted). Applies asynchronously. Dry-run preview unless confirm:true. (For help text use smartsuite_set_field_help_text; for formula expressions use smartsuite_update_formula_field.)',
     inputSchema: {
       type: 'object',
       properties: {
         applicationId: { type: 'string', description: 'The application (table) ID.' },
         slug: { type: 'string', description: 'The field slug to update.' },
         label: { type: 'string', description: 'New label (optional).' },
-        params: { type: 'object', description: 'Optional params patch (shallow-merged onto existing params).' },
+        params: { type: 'object', description: 'Optional params patch (shallow-merged onto existing params). For select fields, omitted choice colors are auto-assigned.' },
         confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_delete_field',
+    description: 'Delete a field from a table by slug. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true AND SMARTSUITE_ENABLE_DELETE=true. Destructive — removes the field and its data (system fields are refused). Useful e.g. to replace a formula field with a rollup: create the rollup, then delete the old formula. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The field slug to delete.' },
+        confirm: { type: 'boolean', description: 'Must be true to delete (default false = preview).' },
+      },
+      required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true },
+  },
+  {
+    name: 'smartsuite_list_deleted_fields',
+    description: 'List soft-deleted fields in a solution (read-only). Returns each deleted field\'s slug, label, and fieldType. Solution-scoped — the API does not attribute deleted fields to their source application, so results are not app-filtered. Restore one with smartsuite_restore_field (supplying the applicationId it belonged to).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID whose deleted fields to list.' },
+      },
+      required: ['solutionId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_restore_field',
+    description: 'Restore a soft-deleted field back into its application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply the applicationId the field belonged to and its slug (from smartsuite_list_deleted_fields). Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) the field belonged to.' },
+        slug: { type: 'string', description: 'The deleted field slug to restore.' },
+        confirm: { type: 'boolean', description: 'Must be true to restore (default false = preview).' },
       },
       required: ['applicationId', 'slug'],
     },
@@ -220,7 +277,7 @@ export const TOOL_DEFINITIONS = [
   // ── Record reads ───────────────────────────────────────────────────────────
   {
     name: 'smartsuite_list_records',
-    description: 'List records from a SmartSuite application. Use smartsuite_describe_application first to learn field slugs.',
+    description: 'List records from a SmartSuite application. Use smartsuite_describe_application first to learn field slugs. For large result sets, pass format:"compact" and a fields projection to cut token usage substantially.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -233,8 +290,9 @@ export const TOOL_DEFINITIONS = [
         fields: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Field slugs to include (empty = all fields)',
+          description: 'Field slugs to include (empty = all fields). Projecting only the fields you need is the biggest token saver.',
         },
+        format: { type: 'string', enum: ['json', 'compact'], description: '"json" (default) = array of record objects. "compact" = { columns, rows } table where field names appear once instead of on every record — materially fewer tokens for large lists, lossless for scalar values. Prefer "compact" for big result sets.' },
         limit: { type: 'number', description: 'Max records to return (default 50, max set by server config)' },
         cursor: { type: 'string', description: 'Pagination cursor from a previous response' },
         includeFieldContext: { type: 'boolean', description: 'When true, adds a _fieldContext map to the response with label, type, helpText, and linked field info for each slug. Defaults to SMARTSUITE_AI_ENRICHED_RECORDS server setting.' },
@@ -288,6 +346,7 @@ export const TOOL_DEFINITIONS = [
         },
         limit: { type: 'number', description: 'Max records to return (default 25)' },
         cursor: { type: 'string', description: 'Pagination cursor' },
+        format: { type: 'string', enum: ['json', 'compact'], description: '"json" (default) or "compact" columns+rows table (fewer tokens for large result sets).' },
         includeFieldContext: { type: 'boolean', description: 'When true, adds a _fieldContext map to the response.' },
       },
       required: ['applicationId', 'query'],
@@ -339,6 +398,7 @@ export const TOOL_DEFINITIONS = [
         },
         limit: { type: 'number', description: 'Max records (default 50)' },
         cursor: { type: 'string', description: 'Pagination cursor' },
+        format: { type: 'string', enum: ['json', 'compact'], description: '"json" (default) or "compact" columns+rows table (fewer tokens for large result sets).' },
         includeFieldContext: { type: 'boolean', description: 'When true, adds a _fieldContext map to the response.' },
       },
       required: ['applicationId', 'filter'],
@@ -360,6 +420,25 @@ export const TOOL_DEFINITIONS = [
         },
       },
       required: ['applicationId', 'fields'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_create_records',
+    description: 'Batch-create multiple records in one call. Requires readwrite or admin mode. Supports dry-run (default) then confirm. Respects the server batch-size cap (SMARTSUITE_MAX_BATCH_WRITES). Returns created record IDs and any per-row failures. Call smartsuite_describe_application first to learn field slugs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID' },
+        records: {
+          type: 'array',
+          items: { type: 'object' },
+          description: 'Records to create — each an object of field values keyed by slug.',
+        },
+        dryRun: { type: 'boolean', description: 'If true, validate/preview without writing (default true).' },
+        confirm: { type: 'boolean', description: 'Must be true to execute when dryRun is false.' },
+      },
+      required: ['applicationId', 'records'],
     },
     annotations: { readOnlyHint: false },
   },
@@ -408,7 +487,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_delete_records',
-    description: 'Delete records. Requires readwrite or admin mode AND SMARTSUITE_ENABLE_DELETE=true. Supports dry-run. Destructive — cannot be undone.',
+    description: 'Delete records (soft-delete to the trash). Requires readwrite or admin mode AND SMARTSUITE_ENABLE_DELETE=true. Supports dry-run. The response returns the deleted recordIds; they can be recovered with smartsuite_restore_records (when SMARTSUITE_ENABLE_RESTORE=true) or listed via smartsuite_list_deleted_records.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -425,6 +504,36 @@ export const TOOL_DEFINITIONS = [
       required: ['applicationId', 'recordIds'],
     },
     annotations: { readOnlyHint: false, destructiveHint: true },
+  },
+  {
+    name: 'smartsuite_list_deleted_records',
+    description: 'List soft-deleted records in a solution\'s trash (read-only). Solution-scoped — spans all applications in the solution; pass applicationId to filter to one. Returns id, title, applicationId, applicationName, deletedBy (member id), and deletedAt. Use the returned ids with smartsuite_restore_records. Respects allow/deny lists.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution ID whose trash to list.' },
+        applicationId: { type: 'string', description: 'Optional: only return deleted records from this application.' },
+        fields: { type: 'array', items: { type: 'string' }, description: 'Optional extra field slugs to include per deleted record.' },
+        pageSize: { type: 'number', description: 'Max deleted records to return (default 100).' },
+        cursor: { type: 'string', description: 'Pagination cursor (next_cursor from a previous response).' },
+      },
+      required: ['solutionId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_restore_records',
+    description: 'Restore soft-deleted records from the trash. Requires readwrite or admin mode AND SMARTSUITE_ENABLE_RESTORE=true. Without confirm:true returns a preview; pass confirm:true to restore. Get record IDs from the smartsuite_delete_records response, the audit log, or smartsuite_list_deleted_records.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application the records belong to.' },
+        recordIds: { type: 'array', items: { type: 'string' }, description: 'IDs of deleted records to restore.' },
+        confirm: { type: 'boolean', description: 'Set true to restore; otherwise returns a dry-run preview.' },
+      },
+      required: ['applicationId', 'recordIds'],
+    },
+    annotations: { readOnlyHint: false },
   },
 
   // ── Comments ───────────────────────────────────────────────────────────────
@@ -486,6 +595,59 @@ export const TOOL_DEFINITIONS = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: 'smartsuite_create_view',
+    description: 'Create a view (report) in an application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply applicationId, label (must be unique — the tool checks and suggests an alternative if taken), and viewMode (grid, card, kanban, calendar, timeline, gantt, chart, map). Optionally set the initial configuration: visibleFields (array of field slugs), filters (array of {field, comparison, value}) with filterOperator ("and"/"or"), sort (array of {field, direction:"asc"|"desc"}), and groupBy (array of {field,...}). Omit config to create a view with SmartSuite defaults. Field slugs are validated against the schema. Dry-run preview unless confirm:true. (For forms use smartsuite_create_form; dashboards are separate.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID the view belongs to.' },
+        label: { type: 'string', description: 'The view name (must be unique within the application).' },
+        viewMode: { type: 'string', description: 'View type: grid, card, kanban, calendar, timeline, gantt, chart, or map.' },
+        description: { type: 'string', description: 'Optional view description.' },
+        visibleFields: { type: 'array', description: 'Optional: field slugs to show, in order.', items: { type: 'string' } },
+        filters: { type: 'array', description: 'Optional: filter conditions [{field, comparison, value}].', items: { type: 'object' } },
+        filterOperator: { type: 'string', enum: ['and', 'or'], description: 'Combine filters with AND or OR (default and).' },
+        sort: { type: 'array', description: 'Optional: sort rules [{field, direction:"asc"|"desc"}].', items: { type: 'object' } },
+        groupBy: { type: 'array', description: 'Optional: group-by rules [{field, ...}].', items: { type: 'object' } },
+        confirm: { type: 'boolean', description: 'Set true to create; otherwise returns a dry-run preview.' },
+      },
+      required: ['applicationId', 'label', 'viewMode'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_view',
+    description: 'Update a view (report): rename it (label), change its description, and/or change its configuration — visibleFields, filters (+filterOperator), sort, groupBy. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Only the parts you pass are changed; each provided config window replaces that window (e.g. passing sort replaces the sort rules). Field slugs are validated. Refuses forms/dashboards (use their own tools). Use smartsuite_list_views / smartsuite_describe_view to find the viewId and current settings.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        viewId: { type: 'string', description: 'The view (report) ID to update.' },
+        label: { type: 'string', description: 'New name (optional; checked for uniqueness).' },
+        description: { type: 'string', description: 'New description (optional).' },
+        visibleFields: { type: 'array', description: 'Replacement visible field slugs (optional).', items: { type: 'string' } },
+        filters: { type: 'array', description: 'Replacement filter conditions [{field, comparison, value}] (optional).', items: { type: 'object' } },
+        filterOperator: { type: 'string', enum: ['and', 'or'], description: 'AND/OR for filters (default and).' },
+        sort: { type: 'array', description: 'Replacement sort rules [{field, direction}] (optional).', items: { type: 'object' } },
+        groupBy: { type: 'array', description: 'Replacement group-by rules (optional).', items: { type: 'object' } },
+      },
+      required: ['viewId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_delete_view',
+    description: 'Delete a view (report). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true AND SMARTSUITE_ENABLE_DELETE=true. Refuses to delete the only remaining view of an application, and refuses forms/dashboards (use their own tools). Without confirm:true returns a preview; pass confirm:true to permanently delete. Destructive — cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        viewId: { type: 'string', description: 'The view (report) ID to delete.' },
+        confirm: { type: 'boolean', description: 'Set true to permanently delete; otherwise returns a dry-run preview.' },
+      },
+      required: ['viewId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
     name: 'smartsuite_list_dashboards',
     description: 'List dashboards for a SmartSuite application. Returns id, name, description, order, tab count, and the tab list (id/name/order) for each dashboard. Use smartsuite_describe_dashboard for branding and widget detail.',
     inputSchema: {
@@ -510,6 +672,106 @@ export const TOOL_DEFINITIONS = [
       required: ['applicationId', 'dashboardId'],
     },
     annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_create_dashboard',
+    description: 'Create a dashboard in an application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply applicationId and a unique label (checked; suggests an alternative if taken). Optionally pass tabs (array of tab names, or {name, order} objects) — otherwise one default tab is created. Add widgets afterward with smartsuite_add_dashboard_widget. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application ID the dashboard belongs to.' },
+        label: { type: 'string', description: 'Dashboard name (unique within the application).' },
+        description: { type: 'string', description: 'Optional description.' },
+        tabs: { type: 'array', description: 'Optional tab names (strings) or {name, order} objects. Default: one tab named "Tab".', items: { type: ['string', 'object'] } },
+        confirm: { type: 'boolean', description: 'Set true to create; otherwise returns a dry-run preview.' },
+      },
+      required: ['applicationId', 'label'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_dashboard',
+    description: 'Update a dashboard: rename (label), change description, and/or edit tabs, footer, and style. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. tabs REPLACES the tab set — pass the full desired list as {id?, name, order?}; include a tab\'s existing id to rename/reorder it (get ids from smartsuite_describe_dashboard), omit id to add a new tab, drop a tab to remove it (its widgets go too). tabsEnabled toggles the tab bar; tabsPosition is "left"/"top". footer/style are merged onto the existing config.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dashboardId: { type: 'string', description: 'The dashboard (report) ID.' },
+        label: { type: 'string', description: 'New name (optional; checked for uniqueness).' },
+        description: { type: 'string', description: 'New description (optional).' },
+        tabs: { type: 'array', description: 'Replacement tab set: [{id?, name, order?}]. Keep ids to preserve/rename tabs; omit id to add; drop to remove.', items: { type: ['string', 'object'] } },
+        tabsEnabled: { type: 'boolean', description: 'Show/hide the tab bar.' },
+        tabsPosition: { type: 'string', description: 'Tab bar position: "left" or "top".' },
+        footer: { type: 'object', description: 'Footer config overrides (merged).' },
+        style: { type: 'object', description: 'Style overrides, e.g. {width, background_color} (merged).' },
+      },
+      required: ['dashboardId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_delete_dashboard',
+    description: 'Delete a dashboard and all its widgets. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true AND SMARTSUITE_ENABLE_DELETE=true. Refuses non-dashboard reports. Without confirm:true returns a preview; pass confirm:true to permanently delete. Destructive — cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dashboardId: { type: 'string', description: 'The dashboard (report) ID to delete.' },
+        confirm: { type: 'boolean', description: 'Set true to permanently delete; otherwise returns a dry-run preview.' },
+      },
+      required: ['dashboardId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_add_dashboard_widget',
+    description: 'Add a widget to a dashboard tab. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply dashboardId, widgetType, and optionally tabId (defaults to the first tab), name, position {x,y}, size {width,height}, and params. VALID widgetType values (19) — content: text-block-widget, heading-widget, simple-banner-widget, hero-widget, faq-widget, divider-widget; data: list-view-widget, card-view-widget, kanban-view-widget, calendar-view-widget, timeline-view-widget, chart-widget, pivot-widget, summary-card-widget, progress-widget, comparison-widget, filter-widget, record-details-widget, data-schema-widget. LAYOUT: x/width are column units, y/height are pixels; defaults position {0,0} size {width:4, height:200}. PARAMS is widget-type-specific and passed through as-is. It is now OPTIONAL: if you omit params, the tool fills a minimal valid template for the widget type (data widgets default to showing the dashboard\'s own application with sensible default fields), so any of the 19 types can be created with just dashboardId + widgetType. Supply params only to customize — e.g. text-block/heading {content:<prosemirror doc>}, divider {color}, data widgets {solution, application, source, ...window objects, filters, fields}. To customize a data widget precisely, describe an existing widget of the same type (smartsuite_describe_dashboard includeWidgets:true) and adapt it. The response includes filledFromTemplate:true when a default template was used.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dashboardId: { type: 'string', description: 'The dashboard (report) ID.' },
+        tabId: { type: 'string', description: 'Tab id to place the widget on (default: first tab).' },
+        widgetType: { type: 'string', description: 'One of the 19 valid widget types (content or data) listed in the tool description.' },
+        name: { type: 'string', description: 'Widget name/title (optional).' },
+        position: { type: 'object', description: 'Grid position {x, y} — x is column units, y is pixels. Default {0,0}.', properties: { x: { type: 'number' }, y: { type: 'number' } } },
+        size: { type: 'object', description: 'Size {width, height} — width is column units, height is pixels. Default {width:4, height:200}.', properties: { width: { type: 'number' }, height: { type: 'number' } } },
+        params: { type: 'object', description: 'Widget-type-specific configuration, passed through. Data widgets need a source; copy the shape from an existing widget of the same type.' },
+      },
+      required: ['dashboardId', 'widgetType'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_dashboard_widget',
+    description: 'Update a dashboard widget\'s settings and/or layout. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Change position {x,y} and size {width,height} to move/resize (x/width columns, y/height pixels), rename (name), toggle showName/collapsedByDefault, set color/description, move to another tab (tabId), or replace params. NOTE: params is replaced wholesale — to tweak it, read the widget first via smartsuite_describe_dashboard(includeWidgets:true) and pass the full new params object.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        widgetId: { type: 'string', description: 'The widget ID (from describe_dashboard).' },
+        name: { type: 'string', description: 'New name (optional).' },
+        position: { type: 'object', description: 'New position {x, y} (optional).', properties: { x: { type: 'number' }, y: { type: 'number' } } },
+        size: { type: 'object', description: 'New size {width, height} (optional).', properties: { width: { type: 'number' }, height: { type: 'number' } } },
+        params: { type: 'object', description: 'Replacement params object (optional; replaces wholesale).' },
+        showName: { type: 'boolean', description: 'Show the widget title (optional).' },
+        collapsedByDefault: { type: 'boolean', description: 'Collapse the widget by default (optional).' },
+        color: { type: 'string', description: 'Widget accent color (optional).' },
+        description: { type: 'string', description: 'Widget description (optional).' },
+        tabId: { type: 'string', description: 'Move the widget to a different tab (optional).' },
+      },
+      required: ['widgetId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_remove_dashboard_widget',
+    description: 'Remove a widget from a dashboard. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true AND SMARTSUITE_ENABLE_DELETE=true. Without confirm:true returns a preview; pass confirm:true to permanently delete. Destructive — cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        widgetId: { type: 'string', description: 'The widget ID to delete.' },
+        confirm: { type: 'boolean', description: 'Set true to permanently delete; otherwise returns a dry-run preview.' },
+      },
+      required: ['widgetId'],
+    },
+    annotations: { readOnlyHint: false },
   },
 
   // ── Forms ──────────────────────────────────────────────────────────────────
@@ -650,7 +912,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_describe_automation_step',
-    description: 'Resolve the full schema of one automation step — its trigger (default) or a chosen action — by calling the automation engine\'s dynamic description. For a trigger: returns label, inputs (with dropdown options), context outputs, the fields the trigger exposes to downstream actions, and the fields usable in conditions. For an action: returns label, integration, and inputs (with options). Use smartsuite_describe_automation first to see the action list; select an action with actionIndex or actionInstanceId.',
+    description: 'Resolve the full schema of one automation step — its trigger (default) or a chosen action — by calling the automation engine\'s dynamic description. For a trigger: returns label, inputs (with dropdown options), context outputs, the fields the trigger exposes to downstream actions, and the fields usable in conditions. For an action: returns label, integration, and inputs (with options). Use smartsuite_describe_automation first to see the action list; select an action with actionIndex or actionInstanceId. This view is for UNDERSTANDING a step (labels, types, option values) and is slimmed — do NOT feed it back into update_automation to edit an action; it omits full input encodings (e.g. an AI action\'s model), and saving a rebuild from it can strip those settings.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -715,7 +977,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_update_automation',
-    description: 'Update an existing automation. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Fetches the current automation and applies only the fields you provide — label, trigger, actionGroups/actions, automaticDescription, timezone — preserving the rest (including first_created). Pass credentialId to fill missing credentials. Note: this replaces the trigger / action groups you supply wholesale (no per-action merge), so pass the complete new trigger or action list.',
+    description: 'Update an existing automation. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Fetches the current automation and applies only the fields you provide — label, trigger, actionGroups/actions, automaticDescription, timezone — preserving the rest (including first_created and the untouched trigger/actions). Pass credentialId to fill missing credentials. IMPORTANT — preserve fidelity: trigger and action groups you supply REPLACE the existing ones wholesale (no per-action merge). To change only the label/description, OMIT trigger and actions so they are preserved byte-for-byte. Do NOT rebuild an action or trigger from smartsuite_describe_automation_step output — that view is SLIMMED (it drops input encodings such as an AI action\'s model setting); reconstructing from it and saving will strip those settings and can leave the automation invalid (which the engine then marks disabled). If you must edit one action, start from the raw automation object and change only the target input. The `enabled` state is engine-computed from validity — you cannot set it directly; a disabled result means the automation is invalid (see the returned statusReason).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -956,17 +1218,33 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_move_layout_field',
-    description: 'Move/arrange an existing field within the record-view layout — reorder it, or place it under a section. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. Pass afterField = the field slug OR a section__ slug to position this field right after it (a field placed right after a section marker becomes the first field under that section); omit afterField to move to the end. In two-column layouts the moved field is re-inserted as its own full-width row. When tabs are enabled, tabId is required (a tab id, "all", or "top"). Dry-run preview unless confirm:true.',
+    description: 'Move/arrange a field in the record-view layout — reorder it, place it under a section, or move it to a different tab. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. To move a field to ANOTHER tab, pass toTab = the destination tab id: the field is removed from its current tab and added to the destination (this is the cross-tab move — plain reorder can\'t pull a field in from another tab). Otherwise it reorders within the current layout. Pass afterField = a field slug OR a section__ slug to position this field right after it (right after a section marker = first field under that section); omit afterField for the end. In two-column layouts the field is placed as its own full-width row. When tabs are enabled and toTab is NOT used, tabId is required (a tab id, "all", or "top"). Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
         applicationId: { type: 'string', description: 'The application (table) ID.' },
         slug: { type: 'string', description: 'The field slug to move.' },
+        toTab: { type: 'string', description: 'Destination tab id — moves the field to that tab (removing it from its current tab). Use this for cross-tab moves.' },
         afterField: { type: 'string', description: 'Field slug or section__ slug to place this field after (default: end).' },
-        tabId: { type: 'string', description: 'When tabs are enabled (required then): a tab id, "all", or "top". Omit when tabs are disabled.' },
+        tabId: { type: 'string', description: 'For within-layout reorder when tabs are enabled (required then): a tab id, "all", or "top". Ignored when toTab is set. Omit when tabs are disabled.' },
         confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
       },
       required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_update_application',
+    description: 'Update table (application) attributes — rename the table (name) and/or change its record term (e.g. "record" → "invoice"). Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. Dry-run preview unless confirm:true. (This is the table rename tool; for field renames use smartsuite_update_field.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        name: { type: 'string', description: 'New table name.' },
+        recordTerm: { type: 'string', description: 'Optional: singular record term for the table (e.g. "invoice").' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId'],
     },
     annotations: { readOnlyHint: false },
   },

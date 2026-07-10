@@ -212,6 +212,53 @@ export function moveFieldInLayout(layout: AnyObj, slug: string, opts: { afterFie
   return { layout: next, found };
 }
 
+/** Remove a field slug from every body in a container: rows (pairs + flat) and seventy_thirty seventy/thirty. */
+function removeFieldFromContainer(container: AnyObj, slug: string): void {
+  for (const key of Object.keys(container)) {
+    const b = container[key];
+    if (!b || typeof b !== 'object' || Array.isArray(b)) continue;
+    if (Array.isArray(b.rows)) {
+      if (key !== 'single_column') {
+        for (const row of b.rows) if (Array.isArray(row)) { if (row[0] === slug) row[0] = ''; if (row[1] === slug) row[1] = ''; }
+        b.rows = b.rows.filter((r: unknown) => !(Array.isArray(r) && r[0] === '' && r[1] === ''));
+      } else {
+        b.rows = b.rows.filter((r: unknown) => r !== slug);
+      }
+    }
+    if (Array.isArray(b.seventy)) b.seventy = b.seventy.filter((s: string) => s !== slug);
+    if (Array.isArray(b.thirty)) b.thirty = b.thirty.filter((s: string) => s !== slug);
+  }
+}
+
+/**
+ * Move a field to a DIFFERENT tab: remove it from every tab's layout and add it to the destination
+ * tab's layout (after `afterField`, or at the end). The field stays in the top-level master layout.
+ * If the destination tab has no layout yet, one is initialized. Requires tabs to be enabled.
+ */
+export function moveFieldToTab(layout: AnyObj, slug: string, toTabId: string, afterField?: string): { layout: AnyObj; toTabName: string } {
+  const next = clone(layout);
+  const tabs = next.tabs?.tabs;
+  if (!Array.isArray(tabs)) throw new Error('This application has no tabs configured; use afterField (and tabId) to reorder within a single layout instead.');
+  const dest = tabs.find((t: AnyObj) => t.id === toTabId);
+  if (!dest) throw new Error(`Tab "${toTabId}" not found. Available: ${tabs.map((t: AnyObj) => `${t.name}(${t.id})`).join(', ') || 'none'}.`);
+
+  for (const t of tabs) if (t.layout && typeof t.layout === 'object') removeFieldFromContainer(t.layout, slug);
+  if (!dest.layout || typeof dest.layout !== 'object') {
+    dest.layout = { fifty_fifty: { rows: [], sections: [] }, seventy_thirty: { seventy: [], thirty: [], seventy_sections: [], thirty_sections: [] } };
+  }
+  for (const { key, body } of rowSectionBodies(dest.layout)) {
+    const pairs = key !== 'single_column';
+    const marker: unknown = pairs ? [slug, ''] : slug;
+    let idx = -1;
+    if (afterField) idx = (body.rows as unknown[]).findIndex((r) => (pairs ? Array.isArray(r) && (r[0] === afterField || r[1] === afterField) : r === afterField));
+    if (idx >= 0) body.rows.splice(idx + 1, 0, marker);
+    else body.rows.push(marker);
+  }
+  const st = dest.layout.seventy_thirty;
+  if (st && Array.isArray(st.thirty) && !st.thirty.includes(slug) && !(Array.isArray(st.seventy) && st.seventy.includes(slug))) st.thirty.push(slug);
+  return { layout: next, toTabName: dest.name ?? toTabId };
+}
+
 /** Flattened slug order (fields + section markers) of the target container's first rows body — for responses. */
 export function rowsOrderOf(layout: AnyObj, tabId?: string): string[] {
   const body = rowSectionBodies(resolveContainer(layout, tabId))[0]?.body;
@@ -653,6 +700,7 @@ export async function handleMoveLayoutField(args: Record<string, unknown>, ctx: 
   const slug = args['slug'] as string;
   const afterField = args['afterField'] as string | undefined;
   const tabId = args['tabId'] as string | undefined;
+  const toTab = args['toTab'] as string | undefined;
   const confirm = args['confirm'] === true;
   if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
   if (!slug) return err('SMARTSUITE_VALIDATION_ERROR', 'slug is required (the field to move).');
@@ -661,16 +709,31 @@ export async function handleMoveLayoutField(args: Record<string, unknown>, ctx: 
     const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
     const layout = app.structure_layout as AnyObj | undefined;
     if (!layout) return err('SMARTSUITE_VALIDATION_ERROR', 'This application has no structure_layout to edit.');
+    if (!(app.structure ?? []).some((f) => f.slug === slug)) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" not found in application ${applicationId}.`);
+
+    // Cross-tab move: relocate the field to another tab's layout.
+    if (toTab) {
+      let moved;
+      try {
+        moved = moveFieldToTab(layout, slug, toTab, afterField);
+      } catch (e) {
+        return err('SMARTSUITE_VALIDATION_ERROR', (e as Error).message);
+      }
+      if (!confirm) return ok({ dryRun: true, wouldMove: slug, toTab, toTabName: moved.toTabName, afterField: afterField ?? '(end)', order: rowsOrderOf(moved.layout, toTab), note: 'Re-call with confirm:true to apply.' });
+      const updated = await ctx.client.updateApplicationLayout(applicationId, moved.layout);
+      return ok({ moved: true, slug, toTab, toTabName: moved.toTabName, order: rowsOrderOf(updated.structure_layout as AnyObj, toTab) });
+    }
+
+    // Within-container reorder.
     const tabGuard = tabSelectionGuard(layout, tabId);
     if (tabGuard) return tabGuard;
-
     let result;
     try {
       result = moveFieldInLayout(layout, slug, { afterField, tabId });
     } catch (e) {
       return err('SMARTSUITE_VALIDATION_ERROR', (e as Error).message);
     }
-    if (!result.found) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" is not placed in ${target(tabId)}.`);
+    if (!result.found) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" is not placed in ${target(tabId)}. To pull it in from another tab, pass toTab.`);
 
     if (!confirm) return ok({ dryRun: true, wouldMove: slug, afterField: afterField ?? '(end)', target: target(tabId), order: rowsOrderOf(result.layout, tabId === 'all' || tabId === 'top' ? undefined : tabId), note: 'Re-call with confirm:true to apply.' });
     const updated = await ctx.client.updateApplicationLayout(applicationId, result.layout);
