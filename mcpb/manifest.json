@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "smartsuite-mcp-server",
   "display_name": "SmartSuite MCP Server",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "Local MCP server for governed access to SmartSuite solutions, applications, records, fields, formulas, views, dashboards, automations, comments, and SmartDocs.",
   "author": {
     "name": "SmartSuite"
@@ -23,6 +23,7 @@
         "SMARTSUITE_MCP_MODE": "${user_config.mode}",
         "SMARTSUITE_MAX_RECORDS": "${user_config.max_records}",
         "SMARTSUITE_ENABLE_DELETE": "${user_config.enable_delete}",
+        "SMARTSUITE_ENABLE_RESTORE": "${user_config.enable_restore}",
         "SMARTSUITE_ENABLE_SCHEMA_WRITE": "${user_config.enable_schema_write}",
         "SMARTSUITE_ENABLE_CROSS_WORKSPACE": "${user_config.enable_cross_workspace}",
         "SMARTSUITE_ALLOWED_WORKSPACES": "${user_config.allowed_workspaces}"
@@ -71,10 +72,17 @@
       "required": false,
       "default": false
     },
+    "enable_restore": {
+      "type": "boolean",
+      "title": "Enable Restore Tools",
+      "description": "Allow restoring soft-deleted records and fields from the trash. Requires readwrite or admin access mode.",
+      "required": false,
+      "default": false
+    },
     "enable_schema_write": {
       "type": "boolean",
       "title": "Enable Schema Writes",
-      "description": "Allow creating and updating fields, formulas, and forms. Requires readwrite or admin access mode.",
+      "description": "Allow creating/updating fields, formulas, forms, views, dashboards, widgets, and automations. Requires readwrite or admin access mode.",
       "required": false,
       "default": false
     },

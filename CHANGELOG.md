@@ -3,7 +3,13 @@
 All notable changes to the SmartSuite MCP Server. Versions marked _(unreleased)_ are built and
 deployed as incremental `.mcpb` artifacts but not yet published as a GitHub release.
 
-## 0.9.5 — _(unreleased)_
+## 0.9.6
+### Fixed
+- **Restore toggle now appears in Claude Desktop**: `SMARTSUITE_ENABLE_RESTORE` was read by the server but not declared in the MCPB manifest, so no config field was shown (and for MCPB installs there was no way to turn it on). Added an "Enable Restore Tools" toggle (default off) and wired the env binding.
+### Changed
+- Manifest description for "Enable Schema Writes" now reflects the full surface (fields, formulas, forms, views, dashboards, widgets, automations).
+
+## 0.9.5
 ### Added
 - **Bulk create records**: `smartsuite_create_records` — batch-create with dry-run/confirm, batch-size cap, and audit; returns created IDs and per-row failures.
 - **Compact record output**: `list`/`query`/`search` records accept `format:"compact"`, returning a `{ columns, rows }` table (field names once instead of per-record) — materially fewer tokens on large result sets, lossless for scalar values. Pairs with the existing `fields` projection.
