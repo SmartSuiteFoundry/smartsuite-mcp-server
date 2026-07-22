@@ -45,6 +45,21 @@ export const TOOL_DEFINITIONS = [
     },
     annotations: { readOnlyHint: true },
   },
+  {
+    name: 'smartsuite_create_solution',
+    description: 'Create a new solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Only a name is required; the server assigns a slug, a default logo, and private-to-you permissions. Optionally set logoIcon and logoColor. Add tables to it with smartsuite_create_application. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The solution name.' },
+        logoIcon: { type: 'string', description: 'Optional icon name for the solution logo.' },
+        logoColor: { type: 'string', description: 'Optional hex color for the solution logo (e.g. "#3A86FF").' },
+        confirm: { type: 'boolean', description: 'Set true to create; otherwise returns a dry-run preview.' },
+      },
+      required: ['name'],
+    },
+    annotations: { readOnlyHint: false },
+  },
 
   // ── Applications ───────────────────────────────────────────────────────────
   {
@@ -59,6 +74,20 @@ export const TOOL_DEFINITIONS = [
       },
     },
     annotations: { readOnlyHint: true },
+  },
+  {
+    name: 'smartsuite_create_application',
+    description: 'Create a new table (application) in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply a name and the solutionId. The table is created with a default "Title" primary field; add more fields with smartsuite_create_field. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The table name.' },
+        solutionId: { type: 'string', description: 'The solution to create the table in.' },
+        confirm: { type: 'boolean', description: 'Set true to create; otherwise returns a dry-run preview.' },
+      },
+      required: ['name', 'solutionId'],
+    },
+    annotations: { readOnlyHint: false },
   },
   {
     name: 'smartsuite_describe_application',
@@ -723,7 +752,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_add_dashboard_widget',
-    description: 'Add a widget to a dashboard tab. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply dashboardId, widgetType, and optionally tabId (defaults to the first tab), name, position {x,y}, size {width,height}, and params. VALID widgetType values (19) — content: text-block-widget, heading-widget, simple-banner-widget, hero-widget, faq-widget, divider-widget; data: list-view-widget, card-view-widget, kanban-view-widget, calendar-view-widget, timeline-view-widget, chart-widget, pivot-widget, summary-card-widget, progress-widget, comparison-widget, filter-widget, record-details-widget, data-schema-widget. LAYOUT: x/width are column units, y/height are pixels; defaults position {0,0} size {width:4, height:200}. PARAMS is widget-type-specific and passed through as-is. It is now OPTIONAL: if you omit params, the tool fills a minimal valid template for the widget type (data widgets default to showing the dashboard\'s own application with sensible default fields), so any of the 19 types can be created with just dashboardId + widgetType. Supply params only to customize — e.g. text-block/heading {content:<prosemirror doc>}, divider {color}, data widgets {solution, application, source, ...window objects, filters, fields}. To customize a data widget precisely, describe an existing widget of the same type (smartsuite_describe_dashboard includeWidgets:true) and adapt it. The response includes filledFromTemplate:true when a default template was used.',
+    description: 'Add a widget to a dashboard tab. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply dashboardId, widgetType, and optionally tabId (defaults to the first tab), name, position {x,y}, size {width,height}, and params. VALID widgetType values — content: text-block-widget, heading-widget, simple-banner-widget, hero-widget, faq-widget, divider-widget; data: list-view-widget, card-view-widget, kanban-view-widget, calendar-view-widget, timeline-view-widget, chart-widget, pivot-widget, summary-card-widget, progress-widget, comparison-widget, filter-widget, record-details-widget, data-schema-widget; other: spacing-widget, button-row-widget, webpage-widget, record-picker-widget, countdown-widget, world-clock-widget (these last six have no auto-fill template — supply params). LAYOUT: x/width are column units (4 = full width), y/height are pixels. If you omit position/size, the widget gets its natural per-type default size (e.g. summary-card/progress/comparison are width 1, height 128; charts width 2; list/calendar width 4) — so metric cards render at the right height. If you omit position, the widget is appended BELOW existing widgets on the tab (not stacked at 0,0, which would overlap/hide widgets) — set position only to place deliberately (e.g. side-by-side metric cards need explicit x). The widget is created with a valid accent color and non-null description/collapsed defaults so the UI highlight-color editor works; pass `color` (hex) to choose the accent. PARAMS is widget-type-specific and passed through as-is. It is now OPTIONAL: if you omit params, the tool fills a minimal valid template for the widget type (data widgets default to showing the dashboard\'s own application with sensible default fields), so any of the 19 types can be created with just dashboardId + widgetType. Supply params only to customize — e.g. text-block/heading {content:<prosemirror doc>}, divider {color}, data widgets {solution, application, source, ...window objects, filters, fields}. To customize a data widget precisely, describe an existing widget of the same type (smartsuite_describe_dashboard includeWidgets:true) and adapt it. The response includes filledFromTemplate:true when a default template was used.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -734,6 +763,7 @@ export const TOOL_DEFINITIONS = [
         position: { type: 'object', description: 'Grid position {x, y} — x is column units, y is pixels. Default {0,0}.', properties: { x: { type: 'number' }, y: { type: 'number' } } },
         size: { type: 'object', description: 'Size {width, height} — width is column units, height is pixels. Default {width:4, height:200}.', properties: { width: { type: 'number' }, height: { type: 'number' } } },
         params: { type: 'object', description: 'Widget-type-specific configuration, passed through. Data widgets need a source; copy the shape from an existing widget of the same type.' },
+        color: { type: 'string', description: 'Optional accent color (hex, e.g. "#3A86FF"). Defaults to a valid color so the UI highlight-color editor works.' },
       },
       required: ['dashboardId', 'widgetType'],
     },
@@ -770,6 +800,22 @@ export const TOOL_DEFINITIONS = [
         confirm: { type: 'boolean', description: 'Set true to permanently delete; otherwise returns a dry-run preview.' },
       },
       required: ['widgetId'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_normalize_dashboard_widgets',
+    description: 'Reset existing widgets on a dashboard to their natural per-type size. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Fixes dashboards whose widgets were created with a wrong/uniform size — e.g. metric/summary cards left too tall (which re-saving in the UI does not correct). Dry-run preview (before→after per widget) unless confirm:true. By default only HEIGHT is normalized (leaving width/position so row layouts aren\'t reflowed); pass dimension:"both" to also fix width. Restrict with widgetTypes (e.g. ["summary-card-widget"]) or tabId. Note: sizes are corrected in place; it does not re-flow surrounding widgets, so a shrunk widget may leave a gap.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dashboardId: { type: 'string', description: 'The dashboard (report) ID.' },
+        tabId: { type: 'string', description: 'Optional: only normalize widgets on this tab.' },
+        widgetTypes: { type: 'array', items: { type: 'string' }, description: 'Optional: only normalize these widget types (e.g. ["summary-card-widget"]).' },
+        dimension: { type: 'string', enum: ['height', 'both'], description: '"height" (default) fixes height only; "both" also fixes width.' },
+        confirm: { type: 'boolean', description: 'Set true to apply; otherwise returns a dry-run preview of the changes.' },
+      },
+      required: ['dashboardId'],
     },
     annotations: { readOnlyHint: false },
   },

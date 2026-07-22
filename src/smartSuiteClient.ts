@@ -290,6 +290,16 @@ export class SmartSuiteClient {
     return this.request<Solution>('GET', `/solutions/${solutionId}/`);
   }
 
+  /** Create a solution. Minimal body {name}; server fills slug, default logo, and private permissions. */
+  async createSolution(body: Record<string, unknown>): Promise<Solution> {
+    return this.request<Solution>('POST', '/solutions/', body);
+  }
+
+  /** Create a table (application). `structure` is required by the API; [] auto-creates the default title field. */
+  async createApplication(body: Record<string, unknown>): Promise<ApplicationDetail> {
+    return this.request<ApplicationDetail>('POST', '/applications/', { structure: [], ...body });
+  }
+
   // ── Applications ───────────────────────────────────────────────────────────
 
   async listApplications(solutionId?: string): Promise<ApplicationSummary[]> {

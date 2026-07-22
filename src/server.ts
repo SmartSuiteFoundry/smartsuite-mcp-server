@@ -12,8 +12,8 @@ import { WorkspaceResolver } from './workspaces.js';
 
 import { handleDiagnostics } from './tools/diagnostics.js';
 import { handleListWorkspaces } from './tools/workspaces.js';
-import { handleListSolutions, handleGetSolution } from './tools/solutions.js';
-import { handleListApplications, handleDescribeApplication, handleUpdateApplication, handleListDeletedApplications } from './tools/applications.js';
+import { handleListSolutions, handleGetSolution, handleCreateSolution } from './tools/solutions.js';
+import { handleListApplications, handleDescribeApplication, handleUpdateApplication, handleListDeletedApplications, handleCreateApplication } from './tools/applications.js';
 import { handleListFields, handleDescribeField, handleSetFieldHelpText, handleCreateField, handleUpdateField, handleDeleteField, handleListDeletedFields, handleRestoreField } from './tools/fields.js';
 import {
   handleAnalyzeFormulas,
@@ -51,6 +51,7 @@ import {
   handleAddDashboardWidget,
   handleUpdateDashboardWidget,
   handleRemoveDashboardWidget,
+  handleNormalizeDashboardWidgets,
 } from './tools/dashboards.write.js';
 import {
   handleListAutomations,
@@ -99,8 +100,10 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_list_workspaces:       handleListWorkspaces,
   smartsuite_list_solutions:        handleListSolutions,
   smartsuite_get_solution:          handleGetSolution,
+  smartsuite_create_solution:       handleCreateSolution,
   smartsuite_list_applications:     handleListApplications,
   smartsuite_describe_application:  handleDescribeApplication,
+  smartsuite_create_application:    handleCreateApplication,
   smartsuite_update_application:    handleUpdateApplication,
   smartsuite_list_fields:           handleListFields,
   smartsuite_describe_field:        handleDescribeField,
@@ -141,6 +144,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_add_dashboard_widget:    handleAddDashboardWidget,
   smartsuite_update_dashboard_widget: handleUpdateDashboardWidget,
   smartsuite_remove_dashboard_widget: handleRemoveDashboardWidget,
+  smartsuite_normalize_dashboard_widgets: handleNormalizeDashboardWidgets,
   smartsuite_list_automations:      handleListAutomations,
   smartsuite_describe_automation:   handleDescribeAutomation,
   smartsuite_describe_automation_step: handleDescribeAutomationStep,

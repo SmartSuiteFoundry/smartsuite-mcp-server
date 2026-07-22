@@ -231,3 +231,44 @@ export async function handleListDeletedApplications(args: Record<string, unknown
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
 }
+
+/**
+ * Create a table (application) in a solution. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE.
+ * The API requires a `structure`; the client defaults it to [] and the server auto-creates the primary
+ * title field. Dry-run preview unless confirm:true.
+ */
+export async function handleCreateApplication(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  if (ctx.config.mode === 'readonly') {
+    return err('MCP_MODE_BLOCKED', 'Creating a table is blocked in readonly mode. Set SMARTSUITE_MCP_MODE=readwrite or admin.');
+  }
+  if (!ctx.config.enableSchemaWrite) {
+    return err('MCP_MODE_BLOCKED', 'Table creation is disabled. Set SMARTSUITE_ENABLE_SCHEMA_WRITE=true to create tables.');
+  }
+
+  const name = args['name'] as string;
+  const solutionId = args['solutionId'] as string;
+  const confirm = args['confirm'] === true;
+  if (!name?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'name is required.');
+  if (!solutionId) return err('SMARTSUITE_VALIDATION_ERROR', 'solutionId is required.');
+
+  if (!confirm) {
+    return ok({ dryRun: true, wouldCreate: { name, solutionId }, hint: 'Set confirm=true to create the table. A default "Title" primary field is added automatically.' });
+  }
+
+  try {
+    const app = await ctx.client.createApplication({ name, solution: solutionId });
+    const primary = (app.structure ?? []).find((f) => (f.params as { primary?: boolean } | undefined)?.primary) ?? (app.structure ?? [])[0];
+    return ok({
+      created: true,
+      application: {
+        id: app.id,
+        name: app.name,
+        slug: (app as { slug?: string }).slug ?? null,
+        solutionId,
+        primaryField: primary ? { slug: primary.slug, label: primary.label } : null,
+      },
+    });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}

@@ -1,6 +1,6 @@
 import { Config, LogLevel, McpMode } from './types/config.js';
 
-const SERVER_VERSION = '0.9.6';
+const SERVER_VERSION = '0.9.7';
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
   const val = env[key];

@@ -1,10 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { generateTabId, buildTabs, buildDashboardConfig, widgetLayoutPatch, KNOWN_WIDGET_TYPES, CONTENT_WIDGET_TYPES, DATA_WIDGET_TYPES, fillWidgetTemplate, pickTemplateFields } from '../../src/tools/dashboards.write.js';
+import { generateTabId, buildTabs, buildDashboardConfig, widgetLayoutPatch, KNOWN_WIDGET_TYPES, CONTENT_WIDGET_TYPES, DATA_WIDGET_TYPES, fillWidgetTemplate, pickTemplateFields, defaultLayoutFor } from '../../src/tools/dashboards.write.js';
 import { WIDGET_TEMPLATES } from '../../src/tools/widget-templates.js';
 
+describe('defaultLayoutFor', () => {
+  it('gives compact metric widgets their natural size (fixes the strange-height bug)', () => {
+    expect(defaultLayoutFor('summary-card-widget')).toEqual({ width: 1, height: 128 });
+    expect(defaultLayoutFor('progress-widget')).toEqual({ width: 1, height: 128 });
+    expect(defaultLayoutFor('comparison-widget')).toEqual({ width: 1, height: 128 });
+  });
+  it('sizes data/content widgets per type, not a uniform 200px', () => {
+    expect(defaultLayoutFor('chart-widget').width).toBe(2);
+    expect(defaultLayoutFor('list-view-widget').width).toBe(4);
+    expect(defaultLayoutFor('summary-card-widget').height).not.toBe(200);
+  });
+  it('falls back to a sane default for unknown types', () => {
+    expect(defaultLayoutFor('mystery-widget')).toEqual({ width: 4, height: 256 });
+  });
+});
+
 describe('widget templates', () => {
-  it('has a verified minimal template for every one of the 19 types', () => {
-    expect(Object.keys(WIDGET_TEMPLATES).sort()).toEqual([...KNOWN_WIDGET_TYPES].sort());
+  it('has auto-fill templates for the 19 content+data types', () => {
+    expect(Object.keys(WIDGET_TEMPLATES).sort()).toEqual([...CONTENT_WIDGET_TYPES, ...DATA_WIDGET_TYPES].sort());
   });
   it('substitutes app/solution/field tokens for data widgets', () => {
     const p = fillWidgetTemplate('list-view-widget', { solution: 'SOL', application: 'APP', primaryField: 'pf', selectField: 'sf', dateField: 'df' })!;
@@ -45,14 +61,15 @@ describe('pickTemplateFields', () => {
 });
 
 describe('widget type catalog', () => {
-  it('has 6 content + 13 data = 19 verified types', () => {
+  it('has 6 content + 13 data (with templates) + 6 other = 25 accepted types', () => {
     expect(CONTENT_WIDGET_TYPES).toHaveLength(6);
     expect(DATA_WIDGET_TYPES).toHaveLength(13);
-    expect(KNOWN_WIDGET_TYPES.size).toBe(19);
+    expect(KNOWN_WIDGET_TYPES.size).toBe(25);
   });
-  it('recognizes real types and rejects non-types', () => {
+  it('recognizes real types (incl. the extra ones) and rejects non-types', () => {
     expect(KNOWN_WIDGET_TYPES.has('list-view-widget')).toBe(true);
-    expect(KNOWN_WIDGET_TYPES.has('data-schema-widget')).toBe(true);
+    expect(KNOWN_WIDGET_TYPES.has('spacing-widget')).toBe(true);
+    expect(KNOWN_WIDGET_TYPES.has('button-row-widget')).toBe(true);
     expect(KNOWN_WIDGET_TYPES.has('grid-view-widget')).toBe(false);
     expect(KNOWN_WIDGET_TYPES.has('image-widget')).toBe(false);
   });

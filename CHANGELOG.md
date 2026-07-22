@@ -3,6 +3,17 @@
 All notable changes to the SmartSuite MCP Server. Versions marked _(unreleased)_ are built and
 deployed as incremental `.mcpb` artifacts but not yet published as a GitHub release.
 
+## 0.9.7
+### Added
+- **Create solutions and tables**: `smartsuite_create_solution` (name + optional logo icon/color; server assigns slug + private permissions) and `smartsuite_create_application` (create a table in a solution, with a default "Title" primary field). Both gated by schema-write + dry-run/confirm.
+### Fixed
+- **Widget with null color broke the dashboard** (reported: choosing a Highlight color over a widget cleared the dashboard). API-created widgets had `color: null`, but the UI color editor expects a hex and blanked the dashboard on a null. Widgets are now created with a valid accent color (default `#3A86FF`, or pass `color`) plus non-null `description`/`collapsed_by_default`, matching UI-created widgets.
+- **Widgets stacked at (0,0) and overlapped** (reported: dividers hidden behind other widgets). `add_dashboard_widget` defaulted every widget to position (0,0), so multiple widgets piled on top of each other and thin ones (dividers) disappeared behind taller ones. When `position` is omitted, a widget is now appended **below** the lowest existing widget on the tab.
+- **Dashboard widgets got a wrong default height** (reported: metric/summary cards with "strange heights" that re-saving didn't fix). `add_dashboard_widget` applied a uniform `width:4, height:200` to every widget type; since height is stored explicitly, compact widgets like summary-card/progress/comparison rendered too tall and the UI kept the value on re-save. Widgets now default to the natural per-type size the SmartSuite UI uses (e.g. summary-card/progress/comparison = 1×128, charts = 2×448, list/calendar = width 4), taken from real dashboards. Callers can still override with `position`/`size`.
+### Added
+- `smartsuite_normalize_dashboard_widgets` — repair tool that resets existing widgets to their natural per-type size (fixes dashboards already built with the wrong sizes). Preview-first; normalizes height only by default (leaving width/position), `dimension:"both"` also fixes width; optional `widgetTypes`/`tabId` filters.
+- Recognize six more real widget types that were previously rejected as unknown: `spacing-widget`, `button-row-widget`, `webpage-widget`, `record-picker-widget`, `countdown-widget`, `world-clock-widget` (accepted with per-type default sizes; no auto-fill param template yet — supply `params`).
+
 ## 0.9.6
 ### Fixed
 - **Restore toggle now appears in Claude Desktop**: `SMARTSUITE_ENABLE_RESTORE` was read by the server but not declared in the MCPB manifest, so no config field was shown (and for MCPB installs there was no way to turn it on). Added an "Enable Restore Tools" toggle (default off) and wired the env binding.

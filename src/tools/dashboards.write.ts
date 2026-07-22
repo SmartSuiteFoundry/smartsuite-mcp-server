@@ -15,8 +15,58 @@ export const DATA_WIDGET_TYPES = [
   'chart-widget', 'pivot-widget', 'summary-card-widget', 'progress-widget', 'comparison-widget',
   'filter-widget', 'record-details-widget', 'data-schema-widget',
 ];
-/** Every SmartSuite dashboard widget type (verified live 2026-07-08). */
-export const KNOWN_WIDGET_TYPES = new Set([...CONTENT_WIDGET_TYPES, ...DATA_WIDGET_TYPES]);
+/** Additional widget types observed in real dashboards (no auto-fill template yet — supply params). */
+export const OTHER_WIDGET_TYPES = [
+  'spacing-widget', 'button-row-widget', 'webpage-widget', 'record-picker-widget', 'countdown-widget', 'world-clock-widget',
+];
+/** Every accepted dashboard widget type. The first 19 (content+data) have auto-fill param templates. */
+export const KNOWN_WIDGET_TYPES = new Set([...CONTENT_WIDGET_TYPES, ...DATA_WIDGET_TYPES, ...OTHER_WIDGET_TYPES]);
+
+/**
+ * Per-type default layout (grid width in columns of 4, height in px), taken from the natural sizes the
+ * SmartSuite UI assigns. A single uniform default (the old width:4/height:200) rendered compact widgets
+ * like metric/summary cards at the wrong height — and since height is stored explicitly, re-saving in the
+ * UI didn't correct it. Callers can still override via position/size.
+ */
+export const WIDGET_DEFAULT_LAYOUT: Record<string, { width: number; height: number }> = {
+  'summary-card-widget': { width: 1, height: 128 },
+  'progress-widget':     { width: 1, height: 128 },
+  'comparison-widget':   { width: 1, height: 128 },
+  'countdown-widget':    { width: 1, height: 192 },
+  'world-clock-widget':  { width: 1, height: 320 },
+  'webpage-widget':      { width: 1, height: 256 },
+  'chart-widget':        { width: 2, height: 448 },
+  'pivot-widget':        { width: 2, height: 448 },
+  'card-view-widget':    { width: 2, height: 432 },
+  'kanban-view-widget':  { width: 2, height: 432 },
+  'data-schema-widget':  { width: 2, height: 384 },
+  'list-view-widget':    { width: 4, height: 448 },
+  'calendar-view-widget':{ width: 4, height: 768 },
+  'timeline-view-widget':{ width: 4, height: 256 },
+  'record-details-widget': { width: 4, height: 768 },
+  'record-picker-widget': { width: 4, height: 128 },
+  'filter-widget':       { width: 4, height: 128 },
+  'simple-banner-widget':{ width: 4, height: 256 },
+  'hero-widget':         { width: 4, height: 256 },
+  'heading-widget':      { width: 4, height: 116 },
+  'text-block-widget':   { width: 2, height: 256 },
+  'faq-widget':          { width: 4, height: 256 },
+  'divider-widget':      { width: 4, height: 88 },
+  'button-row-widget':   { width: 4, height: 56 },
+  'spacing-widget':      { width: 4, height: 40 },
+};
+const FALLBACK_LAYOUT = { width: 4, height: 256 };
+/**
+ * Widgets created via the API get `color: null` unless set, but UI-created widgets always carry a hex.
+ * The dashboard's "Highlight color" editor writes to `color` and breaks on a null (blanks the dashboard),
+ * so we always seed a valid accent color on create.
+ */
+const DEFAULT_WIDGET_COLOR = '#3A86FF';
+
+/** Resolve the default {width,height} for a widget type. */
+export function defaultLayoutFor(widgetType: string): { width: number; height: number } {
+  return WIDGET_DEFAULT_LAYOUT[widgetType] ?? FALLBACK_LAYOUT;
+}
 
 interface TemplateFill {
   solution: string;
@@ -322,15 +372,27 @@ export async function handleAddDashboardWidget(args: Record<string, unknown>, ct
     }
 
     const layout = widgetLayoutPatch(args);
+    const def = defaultLayoutFor(widgetType);
+    // When position_y isn't given, append below the lowest existing widget on the tab rather than
+    // stacking everything at y=0 (which makes widgets overlap and hides thin ones like dividers).
+    let positionY = layout['position_y'];
+    if (positionY === undefined) {
+      const existing = await ctx.client.listDashboardWidgets(dashboardId, tabId);
+      positionY = existing.reduce((max, w) => Math.max(max, (w.position_y ?? 0) + (w.height ?? 0)), 0);
+    }
     const body: Record<string, unknown> = {
       report: dashboardId,
       tab: tabId,
       widget_type: widgetType,
       name: name ?? widgetType.replace(/-widget$/, '').replace(/-/g, ' '),
       position_x: layout['position_x'] ?? 0,
-      position_y: layout['position_y'] ?? 0,
-      width: layout['width'] ?? 4,
-      height: layout['height'] ?? 200,
+      position_y: positionY,
+      width: layout['width'] ?? def.width,
+      height: layout['height'] ?? def.height,
+      // Non-null defaults matching UI-created widgets, so the UI's color/description editors don't choke.
+      color: typeof args['color'] === 'string' ? args['color'] : DEFAULT_WIDGET_COLOR,
+      description: typeof args['description'] === 'string' ? args['description'] : '',
+      collapsed_by_default: false,
       params,
     };
     const created = await ctx.client.createWidget(body);
@@ -386,6 +448,68 @@ export async function handleRemoveDashboardWidget(args: Record<string, unknown>,
     }
     await ctx.client.deleteWidget(widgetId);
     return ok({ deleted: true, id: widgetId, name: widget?.name ?? null });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+/**
+ * Reset existing widgets to their natural per-type size (see WIDGET_DEFAULT_LAYOUT). Fixes dashboards
+ * whose widgets were created with the old uniform default (notably metric/summary cards stuck too tall).
+ * Preview-first: dry-run unless confirm:true. By default normalizes HEIGHT only (the reported problem) and
+ * leaves width/position untouched so row layouts aren't reflowed; pass dimension:"both" to also fix width.
+ * Optional widgetTypes restricts which types are touched (e.g. ["summary-card-widget"]).
+ */
+export async function handleNormalizeDashboardWidgets(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = writeGuard(ctx);
+  if (blocked) return blocked;
+
+  const dashboardId = args['dashboardId'] as string;
+  const tabId = args['tabId'] as string | undefined;
+  const widgetTypes = args['widgetTypes'] as string[] | undefined;
+  const dimension = args['dimension'] === 'both' ? 'both' : 'height';
+  const confirm = args['confirm'] === true;
+  if (!dashboardId) return err('SMARTSUITE_VALIDATION_ERROR', 'dashboardId is required.');
+
+  try {
+    const report = await ctx.client.getReport(dashboardId);
+    if (report.view_mode !== DASHBOARD_MODE) {
+      return err('SMARTSUITE_VALIDATION_ERROR', `"${dashboardId}" is a ${report.view_mode}, not a dashboard.`);
+    }
+    const typeFilter = Array.isArray(widgetTypes) && widgetTypes.length ? new Set(widgetTypes) : null;
+    const tabs = tabsOf(report).filter((t) => !tabId || t.id === tabId);
+
+    const changes: Array<{ id: string; type: string; name: string; tabId: string; from: { width: number; height: number }; to: { width: number; height: number } }> = [];
+    for (const tab of tabs) {
+      const widgets = await ctx.client.listDashboardWidgets(dashboardId, tab.id);
+      for (const w of widgets) {
+        if (typeFilter && !typeFilter.has(w.widget_type)) continue;
+        const def = defaultLayoutFor(w.widget_type);
+        const from = { width: w.width ?? 0, height: w.height ?? 0 };
+        const to = { width: dimension === 'both' ? def.width : from.width, height: def.height };
+        if (to.width !== from.width || to.height !== from.height) {
+          changes.push({ id: w.id, type: w.widget_type, name: w.name, tabId: tab.id, from, to });
+        }
+      }
+    }
+
+    if (!confirm) {
+      return ok({ dryRun: true, dimension, wouldNormalize: changes.length, changes, hint: 'Set confirm:true to apply. dimension:"both" also fixes width.' });
+    }
+
+    const fixed: string[] = [];
+    const failures: Array<{ id: string; reason: string }> = [];
+    for (const c of changes) {
+      try {
+        const patch: Record<string, unknown> = { height: c.to.height };
+        if (dimension === 'both') patch['width'] = c.to.width;
+        await ctx.client.updateWidget(c.id, patch);
+        fixed.push(c.id);
+      } catch (e) {
+        failures.push({ id: c.id, reason: toErrorResponse(e).message });
+      }
+    }
+    return ok({ normalized: fixed.length, failed: failures.length, dimension, failures });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
