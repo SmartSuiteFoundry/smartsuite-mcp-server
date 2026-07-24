@@ -29,7 +29,7 @@ export const KNOWN_WIDGET_TYPES = new Set([...CONTENT_WIDGET_TYPES, ...DATA_WIDG
  * UI didn't correct it. Callers can still override via position/size.
  */
 export const WIDGET_DEFAULT_LAYOUT: Record<string, { width: number; height: number }> = {
-  'summary-card-widget': { width: 1, height: 128 },
+  'summary-card-widget': { width: 1, height: 156 }, // 128 clips the card's bottom padding; 156 is the correct height
   'progress-widget':     { width: 1, height: 128 },
   'comparison-widget':   { width: 1, height: 128 },
   'countdown-widget':    { width: 1, height: 192 },
@@ -468,6 +468,7 @@ export async function handleNormalizeDashboardWidgets(args: Record<string, unkno
   const tabId = args['tabId'] as string | undefined;
   const widgetTypes = args['widgetTypes'] as string[] | undefined;
   const dimension = args['dimension'] === 'both' ? 'both' : 'height';
+  const reflow = args['reflow'] === true;
   const confirm = args['confirm'] === true;
   if (!dashboardId) return err('SMARTSUITE_VALIDATION_ERROR', 'dashboardId is required.');
 
@@ -477,39 +478,62 @@ export async function handleNormalizeDashboardWidgets(args: Record<string, unkno
       return err('SMARTSUITE_VALIDATION_ERROR', `"${dashboardId}" is a ${report.view_mode}, not a dashboard.`);
     }
     const typeFilter = Array.isArray(widgetTypes) && widgetTypes.length ? new Set(widgetTypes) : null;
+    const inScope = (t: string) => !typeFilter || typeFilter.has(t);
     const tabs = tabsOf(report).filter((t) => !tabId || t.id === tabId);
 
-    const changes: Array<{ id: string; type: string; name: string; tabId: string; from: { width: number; height: number }; to: { width: number; height: number } }> = [];
+    interface Change { id: string; type: string; name: string; tabId: string; from: { width: number; height: number; y: number }; to: { width: number; height: number; y: number }; patch: Record<string, unknown> }
+    const changes: Change[] = [];
+
     for (const tab of tabs) {
       const widgets = await ctx.client.listDashboardWidgets(dashboardId, tab.id);
-      for (const w of widgets) {
-        if (typeFilter && !typeFilter.has(w.widget_type)) continue;
+      // Target size per widget (natural per-type for in-scope widgets; unchanged otherwise).
+      const meta = widgets.map((w) => {
         const def = defaultLayoutFor(w.widget_type);
-        const from = { width: w.width ?? 0, height: w.height ?? 0 };
-        const to = { width: dimension === 'both' ? def.width : from.width, height: def.height };
-        if (to.width !== from.width || to.height !== from.height) {
-          changes.push({ id: w.id, type: w.widget_type, name: w.name, tabId: tab.id, from, to });
+        const curW = w.width ?? 0, curH = w.height ?? 0, curY = w.position_y ?? 0;
+        return {
+          w, curW, curH, curY,
+          targetW: dimension === 'both' && inScope(w.widget_type) ? def.width : curW,
+          targetH: inScope(w.widget_type) ? def.height : curH,
+          targetY: curY,
+        };
+      });
+      // Reflow: group widgets by their current row (identical position_y), order rows top→bottom, and
+      // stack them using each row's tallest target height. Preserves columns (position_x) and rows.
+      if (reflow) {
+        const byRow = new Map<number, typeof meta>();
+        for (const m of meta) { const g = byRow.get(m.curY) ?? []; g.push(m); byRow.set(m.curY, g); }
+        let cursor = 0;
+        for (const y of [...byRow.keys()].sort((a, b) => a - b)) {
+          const grp = byRow.get(y)!;
+          for (const m of grp) m.targetY = cursor;
+          cursor += Math.max(...grp.map((m) => m.targetH));
         }
+      }
+      for (const m of meta) {
+        const sizeChanged = inScope(m.w.widget_type) && (m.targetW !== m.curW || m.targetH !== m.curH);
+        const posChanged = reflow && m.targetY !== m.curY;
+        if (!sizeChanged && !posChanged) continue;
+        const patch: Record<string, unknown> = {};
+        if (sizeChanged) { patch['height'] = m.targetH; if (dimension === 'both') patch['width'] = m.targetW; }
+        if (posChanged) patch['position_y'] = m.targetY;
+        changes.push({
+          id: m.w.id, type: m.w.widget_type, name: m.w.name, tabId: tab.id,
+          from: { width: m.curW, height: m.curH, y: m.curY }, to: { width: m.targetW, height: m.targetH, y: m.targetY }, patch,
+        });
       }
     }
 
     if (!confirm) {
-      return ok({ dryRun: true, dimension, wouldNormalize: changes.length, changes, hint: 'Set confirm:true to apply. dimension:"both" also fixes width.' });
+      return ok({ dryRun: true, dimension, reflow, wouldNormalize: changes.length, changes: changes.map(({ patch, ...c }) => c), hint: 'Set confirm:true to apply. dimension:"both" also fixes width; reflow:true re-stacks widgets to remove overlaps.' });
     }
 
     const fixed: string[] = [];
     const failures: Array<{ id: string; reason: string }> = [];
     for (const c of changes) {
-      try {
-        const patch: Record<string, unknown> = { height: c.to.height };
-        if (dimension === 'both') patch['width'] = c.to.width;
-        await ctx.client.updateWidget(c.id, patch);
-        fixed.push(c.id);
-      } catch (e) {
-        failures.push({ id: c.id, reason: toErrorResponse(e).message });
-      }
+      try { await ctx.client.updateWidget(c.id, c.patch); fixed.push(c.id); }
+      catch (e) { failures.push({ id: c.id, reason: toErrorResponse(e).message }); }
     }
-    return ok({ normalized: fixed.length, failed: failures.length, dimension, failures });
+    return ok({ normalized: fixed.length, failed: failures.length, dimension, reflow, failures });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }

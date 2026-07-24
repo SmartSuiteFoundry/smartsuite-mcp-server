@@ -190,6 +190,20 @@ export class SmartSuiteClient {
     return (res as { automations?: Automation[] }).automations ?? [];
   }
 
+  /**
+   * Fetch a single automation by id. Uses the GetAutomation RPC, which — unlike ListAutomations —
+   * still succeeds when a solution contains an action type that breaks the bulk JSON serializer
+   * (e.g. the AI "ai-custom-prompt" action makes ListAutomations 500 for the whole solution).
+   */
+  async getAutomation(automationId: string, solutionId: string): Promise<Automation | null> {
+    const res = await this.requestUrl<{ automation?: Automation }>(
+      'POST',
+      `${this.rpcOrigin}/smartsuite.automation_engine.engine.Automations/GetAutomation`,
+      { automation_id: automationId, solution_id: solutionId },
+    );
+    return res?.automation ?? null;
+  }
+
   /** Origin for the engine RPCs (host root, not the /api/v1 REST base). */
   private get rpcOrigin(): string {
     return new URL(this.cfg.baseUrl).origin;

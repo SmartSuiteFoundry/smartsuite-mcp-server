@@ -4,7 +4,7 @@ import { WIDGET_TEMPLATES } from '../../src/tools/widget-templates.js';
 
 describe('defaultLayoutFor', () => {
   it('gives compact metric widgets their natural size (fixes the strange-height bug)', () => {
-    expect(defaultLayoutFor('summary-card-widget')).toEqual({ width: 1, height: 128 });
+    expect(defaultLayoutFor('summary-card-widget')).toEqual({ width: 1, height: 156 });
     expect(defaultLayoutFor('progress-widget')).toEqual({ width: 1, height: 128 });
     expect(defaultLayoutFor('comparison-widget')).toEqual({ width: 1, height: 128 });
   });

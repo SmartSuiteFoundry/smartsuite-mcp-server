@@ -63,6 +63,7 @@ import {
   handleCreateAutomation,
   handleUpdateAutomation,
   handleDeleteAutomation,
+  handleSetAutomationAiPrompt,
 } from './tools/automations.js';
 import {
   handleListForms,
@@ -154,6 +155,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_create_automation:     handleCreateAutomation,
   smartsuite_update_automation:     handleUpdateAutomation,
   smartsuite_delete_automation:     handleDeleteAutomation,
+  smartsuite_set_automation_ai_prompt: handleSetAutomationAiPrompt,
   smartsuite_list_my_work:          handleListMyWork,
   smartsuite_update_my_work:        handleUpdateMyWork,
   smartsuite_add_layout_section:    handleAddLayoutSection,

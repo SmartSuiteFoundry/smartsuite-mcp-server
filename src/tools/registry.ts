@@ -231,7 +231,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_field',
-    description: 'Create a field of any type in an application (including rollup and lookup fields — not just formulas). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply fieldType + label and an OPTIONAL sparse params object; SmartSuite fills type defaults, so most fields need no params. Provide params only where they matter, e.g.: singleselectfield/multipleselectfield/statusfield → {choices:[{label, value_help_text?, weight?}]} where value_help_text is the option DESCRIPTION shown in the dropdown and weight is its NUMERIC value (used by formulas/rollups); e.g. {choices:[{label:"High", value_help_text:"Ship this week", weight:3}]}. Choice colors and order are auto-assigned if omitted so the dropdown renders correctly (status choices take no weight/description); linkedrecordfield → {linked_application:"<app id>", entries_allowed:"single"|"multiple"} (backlink auto-created); rollupfield → {linked_field:"<linkedrecord field slug in THIS table>", field_selection:"<field slug in the LINKED table>", function:"sum"|"count"|"min"|"max"|"average"|"concatenate"|...}; lookupfield → {linked_field, field_selection}; numberfield → {precision, separator}; currencyfield → {currency:"USD"}; textfield → {max_length}. (For formula fields use smartsuite_create_formula_field.) The slug is generated and the field is placed in the record-view layout. Dry-run preview unless confirm:true.',
+    description: 'Create a field of any type in an application (including rollup and lookup fields — not just formulas). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply fieldType + label and an OPTIONAL sparse params object; SmartSuite fills type defaults, so most fields need no params. Provide params only where they matter, e.g.: singleselectfield/multipleselectfield/statusfield → {choices:[{label, value_help_text?, weight?}]} where value_help_text is the option DESCRIPTION shown in the dropdown and weight is its NUMERIC value (used by formulas/rollups); e.g. {choices:[{label:"High", value_help_text:"Ship this week", weight:3}]}. Choice colors and order are auto-assigned if omitted so the dropdown renders correctly (status choices take no weight/description); linkedrecordfield → {linked_application:"<app id>", entries_allowed:"single"|"multiple"} (backlink auto-created); rollupfield → {linked_field:"<linkedrecord field slug in THIS table>", field_selection:"<field slug in the LINKED table>", function:"sum"|"count"|"min"|"max"|"average"|"concatenate"|...}; lookupfield → {linked_field, field_selection}; numberfield → {precision, separator}; currencyfield → {currency:"USD"}; textfield → {max_length}. (For formula fields use smartsuite_create_formula_field.) AI FIELDS: to make a field AI-populated, pass `aiPrompt` — a plain-text prompt where `{{field_slug}}` inserts a live reference to another field (e.g. "Summarize {{title}} for {{s096c9e74e}}"). The tool builds the correct rich-text instructions with field-reference pills and enables the AI agent; put the AI model/credential and other ai_agent settings in params.ai_agent if needed. (This is the reliable way to set dynamic AI prompts — do NOT hand-build ai_agent.instructions.) The slug is generated and the field is placed in the record-view layout. Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -239,6 +239,7 @@ export const TOOL_DEFINITIONS = [
         fieldType: { type: 'string', description: 'SmartSuite field type, e.g. textfield, textareafield, richtextareafield, numberfield, currencyfield, percentfield, datefield, duedatefield, singleselectfield, multipleselectfield, statusfield, yesnofield, linkedrecordfield, userfield, emailfield, phonefield, linkfield, filefield, addressfield, ratingfield, durationfield, timefield, checklistfield, tagsfield, colorpickerfield.' },
         label: { type: 'string', description: 'Field display label.' },
         params: { type: 'object', description: 'Optional sparse field params; omit to accept type defaults. See the tool description for which params each type needs.' },
+        aiPrompt: { type: 'string', description: 'Optional: make this an AI-populated field. Plain-text prompt where {{field_slug}} inserts a live reference to another field. The tool builds the rich-text AI instructions (with field pills) and enables the AI agent.' },
         afterFieldSlug: { type: 'string', description: 'Optional: place the new field after this field slug (default: end).' },
         confirm: { type: 'boolean', description: 'Must be true to create (default false = preview).' },
       },
@@ -248,7 +249,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_update_field',
-    description: 'Update a field\'s label and/or params (any type). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. params is a PATCH — only the keys you pass are changed (shallow-merged onto the existing params); everything else (choices, nested, links) is preserved. Read the field first with smartsuite_describe_field to see current params. Note: choices is replaced wholesale, not merged — to edit select options pass the FULL choices array (each choice may set value_help_text=description and weight=numeric value; colors auto-assigned if omitted). Applies asynchronously. Dry-run preview unless confirm:true. (For help text use smartsuite_set_field_help_text; for formula expressions use smartsuite_update_formula_field.)',
+    description: 'Update a field\'s label and/or params (any type). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. params is a PATCH — only the keys you pass are changed (shallow-merged onto the existing params); everything else (choices, nested, links) is preserved. Read the field first with smartsuite_describe_field to see current params. Note: choices is replaced wholesale, not merged — to edit select options pass the FULL choices array (each choice may set value_help_text=description and weight=numeric value; colors auto-assigned if omitted). Applies asynchronously. Dry-run preview unless confirm:true. (For help text use smartsuite_set_field_help_text; for formula expressions use smartsuite_update_formula_field.) AI PROMPT: pass `aiPrompt` (plain text with `{{field_slug}}` references) to (re)build the field\'s dynamic AI instructions; it preserves the existing ai_agent model/settings and replaces only the prompt.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -256,6 +257,7 @@ export const TOOL_DEFINITIONS = [
         slug: { type: 'string', description: 'The field slug to update.' },
         label: { type: 'string', description: 'New label (optional).' },
         params: { type: 'object', description: 'Optional params patch (shallow-merged onto existing params). For select fields, omitted choice colors are auto-assigned.' },
+        aiPrompt: { type: 'string', description: 'Optional: rebuild the field\'s AI prompt. Plain-text with {{field_slug}} references; preserves existing ai_agent model/settings.' },
         confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
       },
       required: ['applicationId', 'slug'],
@@ -752,7 +754,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_add_dashboard_widget',
-    description: 'Add a widget to a dashboard tab. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply dashboardId, widgetType, and optionally tabId (defaults to the first tab), name, position {x,y}, size {width,height}, and params. VALID widgetType values — content: text-block-widget, heading-widget, simple-banner-widget, hero-widget, faq-widget, divider-widget; data: list-view-widget, card-view-widget, kanban-view-widget, calendar-view-widget, timeline-view-widget, chart-widget, pivot-widget, summary-card-widget, progress-widget, comparison-widget, filter-widget, record-details-widget, data-schema-widget; other: spacing-widget, button-row-widget, webpage-widget, record-picker-widget, countdown-widget, world-clock-widget (these last six have no auto-fill template — supply params). LAYOUT: x/width are column units (4 = full width), y/height are pixels. If you omit position/size, the widget gets its natural per-type default size (e.g. summary-card/progress/comparison are width 1, height 128; charts width 2; list/calendar width 4) — so metric cards render at the right height. If you omit position, the widget is appended BELOW existing widgets on the tab (not stacked at 0,0, which would overlap/hide widgets) — set position only to place deliberately (e.g. side-by-side metric cards need explicit x). The widget is created with a valid accent color and non-null description/collapsed defaults so the UI highlight-color editor works; pass `color` (hex) to choose the accent. PARAMS is widget-type-specific and passed through as-is. It is now OPTIONAL: if you omit params, the tool fills a minimal valid template for the widget type (data widgets default to showing the dashboard\'s own application with sensible default fields), so any of the 19 types can be created with just dashboardId + widgetType. Supply params only to customize — e.g. text-block/heading {content:<prosemirror doc>}, divider {color}, data widgets {solution, application, source, ...window objects, filters, fields}. To customize a data widget precisely, describe an existing widget of the same type (smartsuite_describe_dashboard includeWidgets:true) and adapt it. The response includes filledFromTemplate:true when a default template was used.',
+    description: 'Add a widget to a dashboard tab. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply dashboardId, widgetType, and optionally tabId (defaults to the first tab), name, position {x,y}, size {width,height}, and params. VALID widgetType values — content: text-block-widget, heading-widget, simple-banner-widget, hero-widget, faq-widget, divider-widget; data: list-view-widget, card-view-widget, kanban-view-widget, calendar-view-widget, timeline-view-widget, chart-widget, pivot-widget, summary-card-widget, progress-widget, comparison-widget, filter-widget, record-details-widget, data-schema-widget; other: spacing-widget, button-row-widget, webpage-widget, record-picker-widget, countdown-widget, world-clock-widget (these last six have no auto-fill template — supply params). LAYOUT: x/width are column units (4 = full width), y/height are pixels. If you omit position/size, the widget gets its natural per-type default size (e.g. summary-card/progress/comparison are width 1, height 128; charts width 2; list/calendar width 4) — so metric cards render at the right height. If you omit position, the widget is appended BELOW existing widgets on the tab (not stacked at 0,0, which would overlap/hide widgets) — set position only to place deliberately (e.g. side-by-side metric cards need explicit x). The widget is created with a valid accent color and non-null description/collapsed defaults so the UI highlight-color editor works; pass `color` (hex) to choose the accent. PARAMS is widget-type-specific and passed through as-is. It is now OPTIONAL: if you omit params, the tool fills a minimal valid template for the widget type (data widgets default to showing the dashboard\'s own application with sensible default fields), so any of the 19 types can be created with just dashboardId + widgetType. Supply params only to customize — e.g. text-block/heading {content:<prosemirror doc>}, divider {color}, data widgets {solution, application, source, ...window objects, filters, fields}. To customize a data widget precisely, describe an existing widget of the same type (smartsuite_describe_dashboard includeWidgets:true) and adapt it. The response includes filledFromTemplate:true when a default template was used. SUMMARY-CARD (metric) notes: the number renders in params.color — keep it a visible accent (never white/#FFFFFF, or it is invisible on the light card); function_type is count|sum|avg|min|max (avg, NOT "average"); the card needs the drill_in skeleton + appearance/size/mode the template provides; height 156 (128 clips padding). CHART: params must include totals, benchmarks, advanced_options, and categories or it 400s (the template includes them).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -771,7 +773,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_update_dashboard_widget',
-    description: 'Update a dashboard widget\'s settings and/or layout. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Change position {x,y} and size {width,height} to move/resize (x/width columns, y/height pixels), rename (name), toggle showName/collapsedByDefault, set color/description, move to another tab (tabId), or replace params. NOTE: params is replaced wholesale — to tweak it, read the widget first via smartsuite_describe_dashboard(includeWidgets:true) and pass the full new params object.',
+    description: 'Update a dashboard widget\'s settings and/or layout. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Change position {x,y} and size {width,height} to move/resize (x/width columns, y/height pixels), rename (name), toggle showName/collapsedByDefault, set color/description, move to another tab (tabId), or replace params. NOTE: params is replaced wholesale — to tweak it, read the widget first via smartsuite_describe_dashboard(includeWidgets:true) and pass the full new params object. Updating params can also reset the widget height, so pass size in the same call to preserve it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -805,14 +807,15 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_normalize_dashboard_widgets',
-    description: 'Reset existing widgets on a dashboard to their natural per-type size. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Fixes dashboards whose widgets were created with a wrong/uniform size — e.g. metric/summary cards left too tall (which re-saving in the UI does not correct). Dry-run preview (before→after per widget) unless confirm:true. By default only HEIGHT is normalized (leaving width/position so row layouts aren\'t reflowed); pass dimension:"both" to also fix width. Restrict with widgetTypes (e.g. ["summary-card-widget"]) or tabId. Note: sizes are corrected in place; it does not re-flow surrounding widgets, so a shrunk widget may leave a gap.',
+    description: 'Repair a dashboard\'s widgets: reset them to their natural per-type size and/or re-stack them to remove overlaps. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Fixes dashboards built with wrong sizes (e.g. metric cards left too tall — which re-saving in the UI does not correct) or with widgets piled on top of each other (all near position (0,0), so they overlap and hide each other). Dry-run preview (before→after per widget) unless confirm:true. SIZE: by default HEIGHT is normalized; dimension:"both" also fixes width; restrict with widgetTypes (e.g. ["summary-card-widget"]). REFLOW: pass reflow:true to re-lay-out the tab — widgets sharing the same current row (same position_y) are kept side-by-side, and rows are stacked top-to-bottom by their tallest widget so nothing overlaps (reflow repositions ALL widgets on the tab, regardless of widgetTypes). Use tabId to limit to one tab.',
     inputSchema: {
       type: 'object',
       properties: {
         dashboardId: { type: 'string', description: 'The dashboard (report) ID.' },
-        tabId: { type: 'string', description: 'Optional: only normalize widgets on this tab.' },
-        widgetTypes: { type: 'array', items: { type: 'string' }, description: 'Optional: only normalize these widget types (e.g. ["summary-card-widget"]).' },
+        tabId: { type: 'string', description: 'Optional: only affect widgets on this tab.' },
+        widgetTypes: { type: 'array', items: { type: 'string' }, description: 'Optional: only resize these widget types (e.g. ["summary-card-widget"]). Does not limit reflow.' },
         dimension: { type: 'string', enum: ['height', 'both'], description: '"height" (default) fixes height only; "both" also fixes width.' },
+        reflow: { type: 'boolean', description: 'Re-stack widgets top-to-bottom to remove overlaps (preserves each row\'s side-by-side columns). Default false.' },
         confirm: { type: 'boolean', description: 'Set true to apply; otherwise returns a dry-run preview of the changes.' },
       },
       required: ['dashboardId'],
@@ -1054,6 +1057,23 @@ export const TOOL_DEFINITIONS = [
       required: ['solutionId', 'automationId'],
     },
     annotations: { readOnlyHint: false, destructiveHint: true },
+  },
+  {
+    name: 'smartsuite_set_automation_ai_prompt',
+    description: 'Set the dynamic prompt on an automation\'s AI ("AI Workflow Agent" / ai-custom-prompt) action. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply promptTemplate as plain text where `{{field_slug}}` inserts a live reference to a field (resolved against applicationId — the table the automation works on). The tool builds the correct rich-text prompt (with field-reference pills) and writes it to the action, leaving the rest of the automation intact — this is the reliable way to author workflow AI prompts (do NOT hand-build the prompt). If the automation has multiple AI actions, pass actionInstanceId. Dry-run preview unless confirm:true. (Reads via GetAutomation, so it works even in solutions where listing automations fails.)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution the automation belongs to.' },
+        automationId: { type: 'string', description: 'The automation ID.' },
+        applicationId: { type: 'string', description: 'The table whose field slugs {{slug}} references resolve against (usually the automation trigger\'s table).' },
+        promptTemplate: { type: 'string', description: 'Plain-text prompt; {{field_slug}} inserts a live field reference.' },
+        actionInstanceId: { type: ['number', 'string'], description: 'Optional: which AI action, when the automation has more than one (action_reference.instance_id).' },
+        confirm: { type: 'boolean', description: 'Set true to apply; otherwise returns a dry-run preview.' },
+      },
+      required: ['solutionId', 'automationId', 'applicationId', 'promptTemplate'],
+    },
+    annotations: { readOnlyHint: false },
   },
 
   // ── My Work ──────────────────────────────────────────────────────────────────

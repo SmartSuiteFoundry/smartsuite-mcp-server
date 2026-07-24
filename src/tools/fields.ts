@@ -1,7 +1,24 @@
-import { ToolContext, ToolResult, ok } from './context.js';
+import { ToolContext, ToolResult, ok, err } from './context.js';
 import { toErrorResponse } from '../errors.js';
 import { FieldDefinition } from '../types/smartsuite.js';
 import { proseMirrorToText } from '../utils/prosemirror.js';
+import { buildAiPromptDoc } from '../utils/aiPrompt.js';
+
+/**
+ * Fold an `aiPrompt` template into `params.ai_agent.instructions` as a ProseMirror pill doc, preserving
+ * any other ai_agent settings (model, enabled, etc.). `{{slug}}` tokens become field-reference pills;
+ * returns { params, unknownSlugs } so callers can reject a prompt that references unknown fields.
+ */
+function applyAiPrompt(
+  params: Record<string, unknown>,
+  aiPrompt: string,
+  fields: Array<{ slug: string; label: string; field_type: string }>,
+): { params: Record<string, unknown>; unknownSlugs: string[] } {
+  const { doc, unknownSlugs } = buildAiPromptDoc(aiPrompt, fields);
+  const existingAgent = (params['ai_agent'] && typeof params['ai_agent'] === 'object' ? params['ai_agent'] : {}) as Record<string, unknown>;
+  const ai_agent = { enabled: true, ...existingAgent, instructions: doc };
+  return { params: { ...params, ai_agent }, unknownSlugs };
+}
 
 /**
  * Field help text is stored as a ProseMirror doc in `params.help_doc` (the legacy
@@ -128,7 +145,6 @@ export async function handleDescribeField(
   }
 }
 
-import { err } from './context.js';
 import { markdownToProseMirror } from '../utils/prosemirror.js';
 
 function schemaWriteGuard(ctx: ToolContext): ToolResult | null {
@@ -246,15 +262,25 @@ export async function handleCreateField(args: Record<string, unknown>, ctx: Tool
   const fieldType = args['fieldType'] as string;
   const label = args['label'] as string;
   const afterFieldSlug = (args['afterFieldSlug'] as string | undefined) ?? '';
-  const params = (args['params'] && typeof args['params'] === 'object' && !Array.isArray(args['params'])) ? (args['params'] as Record<string, unknown>) : {};
+  let params = (args['params'] && typeof args['params'] === 'object' && !Array.isArray(args['params'])) ? (args['params'] as Record<string, unknown>) : {};
+  const aiPrompt = args['aiPrompt'] as string | undefined;
   const confirm = args['confirm'] === true;
   if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
   if (!fieldType?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'fieldType is required (e.g. textfield, numberfield, singleselectfield, linkedrecordfield).');
   if (!label?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'label is required.');
 
-  const slug = generateFieldSlug();
-  const field = buildFieldDef(slug, label, fieldType, normalizeChoices(fieldType, params));
   try {
+    // Build the AI prompt (ai_agent.instructions) from a {{slug}} template, resolving field references
+    // against the schema so a dynamic prompt is a deterministic operation rather than hand-built pills.
+    if (typeof aiPrompt === 'string' && aiPrompt.trim()) {
+      const schema = await ctx.client.getApplicationSchema(applicationId);
+      const applied = applyAiPrompt(params, aiPrompt, schema.structure ?? []);
+      if (applied.unknownSlugs.length) return err('SMARTSUITE_VALIDATION_ERROR', `aiPrompt references unknown field slug(s): ${applied.unknownSlugs.join(', ')}. Use {{slug}} with slugs from smartsuite_list_fields.`);
+      params = applied.params;
+    }
+
+    const slug = generateFieldSlug();
+    const field = buildFieldDef(slug, label, fieldType, normalizeChoices(fieldType, params));
     if (!confirm) {
       return ok({ dryRun: true, would: { slug, fieldType, label, paramKeys: Object.keys(params).sort(), afterFieldSlug: afterFieldSlug || '(end)' }, note: 'SmartSuite fills type defaults for omitted params. Re-call with confirm:true to create.' });
     }
@@ -279,11 +305,12 @@ export async function handleUpdateField(args: Record<string, unknown>, ctx: Tool
   const slug = args['slug'] as string;
   const label = args['label'] as string | undefined;
   const params = (args['params'] && typeof args['params'] === 'object' && !Array.isArray(args['params'])) ? (args['params'] as Record<string, unknown>) : undefined;
+  const aiPrompt = args['aiPrompt'] as string | undefined;
   const confirm = args['confirm'] === true;
   if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
   if (!slug) return err('SMARTSUITE_VALIDATION_ERROR', 'slug is required.');
-  if (label === undefined && params === undefined) {
-    return err('SMARTSUITE_VALIDATION_ERROR', 'Provide label and/or params (a patch of param keys to set) to update.');
+  if (label === undefined && params === undefined && aiPrompt === undefined) {
+    return err('SMARTSUITE_VALIDATION_ERROR', 'Provide label, params (a patch of param keys), and/or aiPrompt to update.');
   }
 
   try {
@@ -294,8 +321,14 @@ export async function handleUpdateField(args: Record<string, unknown>, ctx: Tool
     const next = JSON.parse(JSON.stringify(field)) as Record<string, any>;
     if (typeof label === 'string') next['label'] = label;
     if (params) next['params'] = normalizeChoices(next['field_type'], mergeFieldParams(next['params'] ?? {}, params));
+    // Rebuild the AI prompt from a template, preserving the field's existing ai_agent (model, enabled).
+    if (typeof aiPrompt === 'string' && aiPrompt.trim()) {
+      const applied = applyAiPrompt(next['params'] ?? {}, aiPrompt, app.structure ?? []);
+      if (applied.unknownSlugs.length) return err('SMARTSUITE_VALIDATION_ERROR', `aiPrompt references unknown field slug(s): ${applied.unknownSlugs.join(', ')}.`);
+      next['params'] = applied.params;
+    }
 
-    const preview = { slug, label: next['label'], fieldType: next['field_type'], changedParams: params ? Object.keys(params).sort() : [] };
+    const preview = { slug, label: next['label'], fieldType: next['field_type'], changedParams: params ? Object.keys(params).sort() : [], aiPromptSet: typeof aiPrompt === 'string' && aiPrompt.trim().length > 0 };
     if (!confirm) return ok({ dryRun: true, would: preview, note: 'Re-call with confirm:true to apply.' });
 
     await ctx.client.changeField(applicationId, next as unknown as FieldDefinition);

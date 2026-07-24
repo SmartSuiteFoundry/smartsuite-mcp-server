@@ -1,6 +1,6 @@
 {
   "name": "@smartsuite/mcp-server",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Local MCP server for governed access to SmartSuite solutions, applications, records, fields, comments, and SmartDocs.",
   "type": "module",
   "main": "dist/index.js",

@@ -1,6 +1,11 @@
 import { ToolContext, ToolResult, ok, err } from './context.js';
 import { toErrorResponse } from '../errors.js';
 import { Automation } from '../types/smartsuite.js';
+import { buildAiPromptDoc } from '../utils/aiPrompt.js';
+
+/** The AI ("AI Workflow Agent") automation action and its prompt input (misspelled `propmt` in the API). */
+const AI_ACTION_ID = 'ai-custom-prompt';
+const AI_PROMPT_INPUT = 'propmt';
 
 /** Summarize an automation's trigger to a readable reference. */
 function triggerSummary(a: Automation): Record<string, unknown> | null {
@@ -90,6 +95,12 @@ export async function handleListAutomations(
     const items = automations.map(slimAutomation);
     return ok({ items, count: items.length });
   } catch (e) {
+    // ListAutomations 500s when a solution contains an action type the bulk JSON serializer can't encode
+    // — notably the AI "ai-custom-prompt" action. Single-automation tools still work; say so clearly.
+    const status = (e as { statusCode?: number }).statusCode;
+    if (typeof status === 'number' && status >= 500) {
+      return err('SMARTSUITE_API_ERROR', 'SmartSuite could not list automations for this solution (the automation engine errors when a solution contains an action type it cannot serialize over the API, e.g. an AI "ai-custom-prompt" action). Individual automations are still reachable — use smartsuite_describe_automation / smartsuite_update_automation with a known automationId.');
+    }
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
 }
@@ -221,8 +232,7 @@ export async function handleDescribeAutomationStep(
   const automationId = args['automationId'] as string;
   const step = (args['step'] as string) === 'action' ? 'action' : 'trigger';
   try {
-    const automations = await ctx.client.listAutomations(solutionId);
-    const automation = automations.find((a) => a.automation_id === automationId);
+    const automation = await getAutomationById(ctx, solutionId, automationId);
     if (!automation) return err('SMARTSUITE_NOT_FOUND', `Automation "${automationId}" not found in solution ${solutionId}`);
 
     if (step === 'trigger') {
@@ -326,11 +336,24 @@ function statusNote(summary: Record<string, unknown> | null): Record<string, unk
   return {};
 }
 
+/**
+ * Fetch one automation by id, resiliently. GetAutomation (single) succeeds even when ListAutomations
+ * 500s for a solution that contains an action type breaking the bulk serializer (e.g. the AI action);
+ * fall back to scanning the list only if the single fetch yields nothing.
+ */
+async function getAutomationById(ctx: ToolContext, solutionId: string, automationId: string): Promise<Automation | undefined> {
+  try {
+    const a = await ctx.client.getAutomation(automationId, solutionId);
+    if (a) return a;
+  } catch { /* fall through to list */ }
+  const list = await ctx.client.listAutomations(solutionId);
+  return list.find((a) => a.automation_id === automationId);
+}
+
 /** Re-fetch the automation after a write so the response reflects the saved state. */
 async function fetchSummary(ctx: ToolContext, solutionId: string, automationId: string): Promise<Record<string, unknown> | null> {
   try {
-    const automations = await ctx.client.listAutomations(solutionId);
-    const found = automations.find((a) => a.automation_id === automationId);
+    const found = await getAutomationById(ctx, solutionId, automationId);
     return found ? slimAutomation(found) : null;
   } catch {
     return null;
@@ -389,8 +412,7 @@ export async function handleUpdateAutomation(
   if (!automationId) return err('SMARTSUITE_VALIDATION_ERROR', 'automationId is required.');
 
   try {
-    const automations = await ctx.client.listAutomations(solutionId);
-    const existing = automations.find((a) => a.automation_id === automationId);
+    const existing = await getAutomationById(ctx, solutionId, automationId);
     if (!existing) return err('SMARTSUITE_NOT_FOUND', `Automation "${automationId}" not found in solution ${solutionId}`);
 
     // Rebuild the update payload from the known automation fields, applying only provided overrides.
@@ -435,8 +457,7 @@ export async function handleDeleteAutomation(
   if (!automationId) return err('SMARTSUITE_VALIDATION_ERROR', 'automationId is required.');
 
   try {
-    const automations = await ctx.client.listAutomations(solutionId);
-    const existing = automations.find((a) => a.automation_id === automationId);
+    const existing = await getAutomationById(ctx, solutionId, automationId);
     if (!existing) return err('SMARTSUITE_NOT_FOUND', `Automation "${automationId}" not found in solution ${solutionId}`);
 
     if (!confirm) {
@@ -462,8 +483,7 @@ export async function handleDescribeAutomation(
   const solutionId = args['solutionId'] as string;
   const automationId = args['automationId'] as string;
   try {
-    const automations = await ctx.client.listAutomations(solutionId);
-    const automation = automations.find((a) => a.automation_id === automationId);
+    const automation = await getAutomationById(ctx, solutionId, automationId);
     if (!automation) {
       return err('SMARTSUITE_NOT_FOUND', `Automation "${automationId}" not found in solution ${solutionId}`);
     }
@@ -475,6 +495,75 @@ export async function handleDescribeAutomation(
       triggerConfig: automation.trigger ?? null,
       actionGroups: automation.action_groups ?? [],
     });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+/**
+ * Set the dynamic prompt on an automation's AI ("AI Workflow Agent") action. The prompt is stored as a
+ * ProseMirror pill doc, stringified into the `propmt` input's `smartdoc_pills_summary` — the same flaky
+ * hand-built shape that made workflow prompts unreliable. This builds it deterministically from a
+ * {{field_slug}} template (resolved against `applicationId`'s schema), preserving the rest of the action.
+ */
+export async function handleSetAutomationAiPrompt(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = writeGuard(ctx);
+  if (blocked) return blocked;
+
+  const solutionId = args['solutionId'] as string;
+  const automationId = args['automationId'] as string;
+  const applicationId = args['applicationId'] as string;
+  const promptTemplate = args['promptTemplate'] as string;
+  const actionInstanceId = args['actionInstanceId'];
+  const confirm = args['confirm'] === true;
+  if (!solutionId) return err('SMARTSUITE_VALIDATION_ERROR', 'solutionId is required.');
+  if (!automationId) return err('SMARTSUITE_VALIDATION_ERROR', 'automationId is required.');
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required (the table whose fields {{slug}} references resolve against — usually the automation trigger\'s table).');
+  if (typeof promptTemplate !== 'string' || !promptTemplate.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'promptTemplate is required (plain text; use {{field_slug}} for dynamic field references).');
+
+  try {
+    const existing = await getAutomationById(ctx, solutionId, automationId);
+    if (!existing) return err('SMARTSUITE_NOT_FOUND', `Automation "${automationId}" not found in solution ${solutionId}`);
+
+    const clone = JSON.parse(JSON.stringify(existing)) as Record<string, any>;
+    const aiActions: Array<Record<string, any>> = [];
+    for (const g of Array.isArray(clone.action_groups) ? clone.action_groups : []) {
+      for (const act of (g?.actions?.actions ?? [])) if (act?.action_reference?.action_id === AI_ACTION_ID) aiActions.push(act);
+    }
+    if (!aiActions.length) return err('SMARTSUITE_VALIDATION_ERROR', 'This automation has no AI ("ai-custom-prompt") action to set a prompt on.');
+    let target = aiActions[0];
+    if (actionInstanceId !== undefined && actionInstanceId !== null) {
+      const match = aiActions.find((a) => a.action_reference?.instance_id === actionInstanceId);
+      if (!match) return err('SMARTSUITE_VALIDATION_ERROR', `No AI action with instance_id ${JSON.stringify(actionInstanceId)}. Available: ${aiActions.map((a) => a.action_reference?.instance_id).join(', ')}.`);
+      target = match;
+    } else if (aiActions.length > 1) {
+      return err('SMARTSUITE_VALIDATION_ERROR', `This automation has ${aiActions.length} AI actions; pass actionInstanceId to choose (${aiActions.map((a) => a.action_reference?.instance_id).join(', ')}).`);
+    }
+
+    const schema = await ctx.client.getApplicationSchema(applicationId);
+    const { doc, referencedSlugs, unknownSlugs } = buildAiPromptDoc(promptTemplate, schema.structure ?? []);
+    if (unknownSlugs.length) return err('SMARTSUITE_VALIDATION_ERROR', `promptTemplate references unknown field slug(s): ${unknownSlugs.join(', ')} (checked against application ${applicationId}).`);
+
+    const value = { values: [{ smartdoc_pills_summary: JSON.stringify(doc) }] };
+    const inputs: Array<Record<string, any>> = Array.isArray(target.inputs) ? target.inputs : (target.inputs = []);
+    const existingInput = inputs.find((i) => i.input_id === AI_PROMPT_INPUT);
+    if (existingInput) existingInput.value = value;
+    else inputs.push({ input_id: AI_PROMPT_INPUT, value_description: { type: 'STRING' }, value });
+
+    if (!confirm) {
+      return ok({ dryRun: true, wouldSetPrompt: { automationId, aiActionInstanceId: target.action_reference?.instance_id ?? null, referencedFields: referencedSlugs }, hint: 'Set confirm:true to apply.' });
+    }
+
+    const payload: Record<string, unknown> = {
+      automation_id: automationId, solution_id: solutionId,
+      label: existing.label, trigger: existing.trigger, action_groups: clone.action_groups,
+      first_created: existing.first_created,
+    };
+    if (existing.automatic_description !== undefined) payload['automatic_description'] = existing.automatic_description;
+    if (existing.timezone !== undefined) payload['timezone'] = existing.timezone;
+    await ctx.client.updateAutomation(payload);
+    const summary = await fetchSummary(ctx, solutionId, automationId);
+    return ok({ updated: true, automationId, aiActionInstanceId: target.action_reference?.instance_id ?? null, referencedFields: referencedSlugs, automation: summary, ...statusNote(summary) });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
