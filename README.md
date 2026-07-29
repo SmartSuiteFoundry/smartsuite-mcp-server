@@ -149,9 +149,9 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `SMARTSUITE_ENABLE_DELETE` | `false` | Enable delete tools |
 | `SMARTSUITE_ENABLE_RESTORE` | `false` | Enable restoring soft-deleted records from the trash |
 | `SMARTSUITE_ENABLE_SCHEMA_WRITE` | `false` | Enable schema write tools (create/update fields, formulas, forms, and automations) |
-| `SMARTSUITE_ALLOWED_SOLUTIONS` | _(all)_ | Comma-separated solution IDs to allow |
-| `SMARTSUITE_ALLOWED_APPLICATIONS` | _(all)_ | Comma-separated application IDs to allow |
-| `SMARTSUITE_DENIED_APPLICATIONS` | _(none)_ | Comma-separated application IDs to block |
+| `SMARTSUITE_ALLOWED_SOLUTIONS` | _(all)_ | Comma-separated solution IDs to allow. Enforced on **every** tool call (a tool targeting an application resolves the app's solution and is blocked if it's outside the list). `list_solutions` only returns allowed solutions, and `list_applications` only returns apps in them. |
+| `SMARTSUITE_ALLOWED_APPLICATIONS` | _(all)_ | Comma-separated application IDs to allow. Enforced on every tool call. |
+| `SMARTSUITE_DENIED_APPLICATIONS` | _(none)_ | Comma-separated application IDs to block. Always enforced. |
 | `SMARTSUITE_ENABLE_CROSS_WORKSPACE` | `false` | Allow read access to other workspaces your API key can reach (see [Cross-workspace access](#cross-workspace-access)) |
 | `SMARTSUITE_ALLOWED_WORKSPACES` | _(all)_ | Comma-separated workspace slugs or names reachable when cross-workspace is enabled; empty allows all accessible workspaces |
 | `SMARTSUITE_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
@@ -161,6 +161,8 @@ smartsuite_describe_application({ applicationId, workspace: "s36h7yr5" })  → b
 | `SCHEMA_CACHE_TTL_MS` | `300000` | Application schema cache TTL (5 min) |
 | `SMARTSUITE_AI_ENRICHED_RECORDS` | `false` | Return field context (label, type, help text, linked field) with every record response |
 | `SMARTSUITE_MIGRATION_DIR` | _(cwd)_ | Base directory for solution-migration project files (mappings/diff/xlsx, under `.smartsuite-migrations/`) |
+
+> **Governance note:** When a solution or application allowlist is set, enforcement is centralized — it applies to reads, writes, and config tools alike, and to tools identified only by a view/dashboard/widget id (their parent is resolved and checked). `get_file_url` (which takes an unscoped file handle) is **disabled** while an allowlist is active. For a locked-down deployment, also keep `SMARTSUITE_ENABLE_CROSS_WORKSPACE=false` — the allowlist scopes the primary workspace; cross-workspace and the migration/diff tools are a separate surface.
 
 ---
 

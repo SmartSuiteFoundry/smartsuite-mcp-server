@@ -77,12 +77,13 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_application',
-    description: 'Create a new table (application) in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply a name and the solutionId. The table is created with a default "Title" primary field; add more fields with smartsuite_create_field. Dry-run preview unless confirm:true.',
+    description: 'Create a new table (application) in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply a name and the solutionId. The table is created with a default "Title" primary field and a record term ("what each record is called", default "Record") — the record term is always set explicitly so it is never left empty (an empty record term can break list-view/grid widget creation against the table). Add more fields with smartsuite_create_field. Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'The table name.' },
         solutionId: { type: 'string', description: 'The solution to create the table in.' },
+        recordTerm: { type: 'string', description: 'What each record is called (singular), e.g. "Request". Defaults to "Record".' },
         confirm: { type: 'boolean', description: 'Set true to create; otherwise returns a dry-run preview.' },
       },
       required: ['name', 'solutionId'],
@@ -1076,6 +1077,20 @@ export const TOOL_DEFINITIONS = [
     annotations: { readOnlyHint: false },
   },
 
+  {
+    name: 'smartsuite_validate_automation',
+    description: 'Check an automation for the errors SmartSuite shows inline in the automation list — most importantly "Trigger output with id <id> not found", which means an action still references a trigger output (a field) that no longer exists (the field was deleted or its slug changed), so the automation is broken. Reproduces the UI check: resolves the trigger\'s current outputs and flags every action-input reference to a missing trigger output. Returns userEnabled (the ON/OFF toggle), status (engine validity: enabled/disabled/pending + reason), valid, and an errors[] list (each with the missing outputId and where it is used). Read-only. Works even in solutions where listing automations fails (uses GetAutomation).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        solutionId: { type: 'string', description: 'The solution the automation belongs to.' },
+        automationId: { type: 'string', description: 'The automation ID to validate.' },
+      },
+      required: ['solutionId', 'automationId'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+
   // ── My Work ──────────────────────────────────────────────────────────────────
   {
     name: 'smartsuite_list_my_work',
@@ -1133,6 +1148,7 @@ export const TOOL_DEFINITIONS = [
       'SmartSuite file fields (type: filefield) return an array of file objects — each has a "handle" property.',
       'Pass that handle here to get a temporary URL for downloading the file.',
       'Example field value: [{ "handle": "abc123", "filename": "report.pdf", "size": 12345, "mimetype": "application/pdf" }]',
+      'Note: a file handle is not scoped to a solution, so this tool is disabled when a solution/application allowlist (SMARTSUITE_ALLOWED_SOLUTIONS / SMARTSUITE_ALLOWED_APPLICATIONS) is configured.',
     ].join(' '),
     inputSchema: {
       type: 'object',

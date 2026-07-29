@@ -9,6 +9,7 @@ import { TOOL_DEFINITIONS } from './tools/registry.js';
 import { ToolContext, ToolResult, err } from './tools/context.js';
 import { toErrorResponse } from './errors.js';
 import { WorkspaceResolver } from './workspaces.js';
+import { enforceAccess } from './access.js';
 
 import { handleDiagnostics } from './tools/diagnostics.js';
 import { handleListWorkspaces } from './tools/workspaces.js';
@@ -64,6 +65,7 @@ import {
   handleUpdateAutomation,
   handleDeleteAutomation,
   handleSetAutomationAiPrompt,
+  handleValidateAutomation,
 } from './tools/automations.js';
 import {
   handleListForms,
@@ -156,6 +158,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_update_automation:     handleUpdateAutomation,
   smartsuite_delete_automation:     handleDeleteAutomation,
   smartsuite_set_automation_ai_prompt: handleSetAutomationAiPrompt,
+  smartsuite_validate_automation:   handleValidateAutomation,
   smartsuite_list_my_work:          handleListMyWork,
   smartsuite_update_my_work:        handleUpdateMyWork,
   smartsuite_add_layout_section:    handleAddLayoutSection,
@@ -269,6 +272,13 @@ export function createServer(deps: ServerDeps) {
       } catch (e) {
         return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
       }
+    }
+
+    // Central allow/deny enforcement — applies the solution/application allowlist to EVERY tool call.
+    const accessDenied = await enforceAccess(name, callArgs, callCtx);
+    if (accessDenied) {
+      logger.debug('access denied', { tool: name });
+      return accessDenied;
     }
 
     try {

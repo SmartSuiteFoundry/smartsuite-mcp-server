@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "smartsuite-mcp-server",
   "display_name": "SmartSuite MCP Server",
-  "version": "0.9.8",
+  "version": "0.9.10",
   "description": "Local MCP server for governed access to SmartSuite solutions, applications, records, fields, formulas, views, dashboards, automations, comments, and SmartDocs.",
   "author": {
     "name": "SmartSuite"
@@ -26,7 +26,10 @@
         "SMARTSUITE_ENABLE_RESTORE": "${user_config.enable_restore}",
         "SMARTSUITE_ENABLE_SCHEMA_WRITE": "${user_config.enable_schema_write}",
         "SMARTSUITE_ENABLE_CROSS_WORKSPACE": "${user_config.enable_cross_workspace}",
-        "SMARTSUITE_ALLOWED_WORKSPACES": "${user_config.allowed_workspaces}"
+        "SMARTSUITE_ALLOWED_WORKSPACES": "${user_config.allowed_workspaces}",
+        "SMARTSUITE_ALLOWED_SOLUTIONS": "${user_config.allowed_solutions}",
+        "SMARTSUITE_ALLOWED_APPLICATIONS": "${user_config.allowed_applications}",
+        "SMARTSUITE_DENIED_APPLICATIONS": "${user_config.denied_applications}"
       }
     }
   },
@@ -97,6 +100,27 @@
       "type": "string",
       "title": "Allowed Workspaces",
       "description": "Optional comma-separated workspace slugs or names reachable when cross-workspace access is on. Leave empty to allow all accessible workspaces.",
+      "required": false,
+      "default": ""
+    },
+    "allowed_solutions": {
+      "type": "string",
+      "title": "Allowed Solutions",
+      "description": "Optional comma-separated solution IDs. When set, ALL access is restricted to these solutions (enforced on every tool call), and other solutions are hidden from list results. Leave empty to allow all solutions.",
+      "required": false,
+      "default": ""
+    },
+    "allowed_applications": {
+      "type": "string",
+      "title": "Allowed Applications (Tables)",
+      "description": "Optional comma-separated application (table) IDs. When set, access is restricted to these tables. Leave empty to allow all tables in the allowed solutions.",
+      "required": false,
+      "default": ""
+    },
+    "denied_applications": {
+      "type": "string",
+      "title": "Denied Applications (Tables)",
+      "description": "Optional comma-separated application (table) IDs to always block, even if otherwise allowed.",
       "required": false,
       "default": ""
     }

@@ -112,10 +112,13 @@ export async function handleListApplications(
   try {
     const apps = await ctx.client.listApplications(solutionId);
 
-    // Apply allowlist/denylist
+    // Apply allowlist/denylist — including the solution allowlist (an app in a non-allowed solution
+    // must not be listed).
+    const { allowedSolutions, allowedApplications, deniedApplications } = ctx.config;
     const filtered = apps.filter((app) => {
-      if (ctx.config.deniedApplications.includes(app.id)) return false;
-      if (ctx.config.allowedApplications.length > 0 && !ctx.config.allowedApplications.includes(app.id)) return false;
+      if (deniedApplications.includes(app.id)) return false;
+      if (allowedApplications.length > 0 && !allowedApplications.includes(app.id)) return false;
+      if (allowedSolutions.length > 0 && !allowedSolutions.includes((app as { solution?: string }).solution ?? '')) return false;
       return true;
     });
 
@@ -235,7 +238,9 @@ export async function handleListDeletedApplications(args: Record<string, unknown
 /**
  * Create a table (application) in a solution. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE.
  * The API requires a `structure`; the client defaults it to [] and the server auto-creates the primary
- * title field. Dry-run preview unless confirm:true.
+ * title field. We also always send a non-empty `record_term` ("what each record is called") rather than
+ * relying on the server's auto-default — an empty record term has been seen to break downstream
+ * list-view/grid widget creation against the table. Dry-run preview unless confirm:true.
  */
 export async function handleCreateApplication(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   if (ctx.config.mode === 'readonly') {
@@ -247,16 +252,19 @@ export async function handleCreateApplication(args: Record<string, unknown>, ctx
 
   const name = args['name'] as string;
   const solutionId = args['solutionId'] as string;
+  // "What should each record be called?" — default to "Record" so it is never left empty.
+  const rt = args['recordTerm'];
+  const recordTerm = typeof rt === 'string' && rt.trim() ? rt.trim() : 'Record';
   const confirm = args['confirm'] === true;
   if (!name?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'name is required.');
   if (!solutionId) return err('SMARTSUITE_VALIDATION_ERROR', 'solutionId is required.');
 
   if (!confirm) {
-    return ok({ dryRun: true, wouldCreate: { name, solutionId }, hint: 'Set confirm=true to create the table. A default "Title" primary field is added automatically.' });
+    return ok({ dryRun: true, wouldCreate: { name, solutionId, recordTerm }, hint: 'Set confirm=true to create the table. A default "Title" primary field is added automatically.' });
   }
 
   try {
-    const app = await ctx.client.createApplication({ name, solution: solutionId });
+    const app = await ctx.client.createApplication({ name, solution: solutionId, record_term: recordTerm });
     const primary = (app.structure ?? []).find((f) => (f.params as { primary?: boolean } | undefined)?.primary) ?? (app.structure ?? [])[0];
     return ok({
       created: true,
@@ -265,6 +273,7 @@ export async function handleCreateApplication(args: Record<string, unknown>, ctx
         name: app.name,
         slug: (app as { slug?: string }).slug ?? null,
         solutionId,
+        recordTerm: (app as { record_term?: string }).record_term ?? recordTerm,
         primaryField: primary ? { slug: primary.slug, label: primary.label } : null,
       },
     });

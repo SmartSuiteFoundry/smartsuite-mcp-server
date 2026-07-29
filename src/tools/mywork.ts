@@ -105,6 +105,21 @@ export async function handleListMyWork(
     const now = Date.now();
     let slimmed = (raw ?? []).map((i) => slim(i as Record<string, any>, now));
 
+    // Governance: My Work spans all solutions, and the central chokepoint can't gate it (no scoping
+    // arg), so enforce the allowlist here — never surface items (titles, record refs, value previews)
+    // from solutions/applications outside the allowlist. Items without an allowed solution are dropped.
+    const { allowedSolutions, allowedApplications, deniedApplications } = ctx.config;
+    if (allowedSolutions.length > 0 || allowedApplications.length > 0 || deniedApplications.length > 0) {
+      slimmed = slimmed.filter((i) => {
+        const app = (i.application ?? '') as string;
+        const sol = (i.solution ?? '') as string;
+        if (deniedApplications.includes(app)) return false;
+        if (allowedApplications.length > 0 && !allowedApplications.includes(app)) return false;
+        if (allowedSolutions.length > 0 && !allowedSolutions.includes(sol)) return false;
+        return true;
+      });
+    }
+
     // Client-side filters.
     if (solutionId) slimmed = slimmed.filter((i) => i.solution === solutionId);
     if (applicationId) slimmed = slimmed.filter((i) => i.application === applicationId);

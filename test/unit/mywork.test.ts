@@ -1,7 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { _internal, buildMyWorkPatch } from '../../src/tools/mywork.js';
+import { _internal, buildMyWorkPatch, handleListMyWork } from '../../src/tools/mywork.js';
 
 const { slim, summarize, truncate, dueDateOf } = _internal;
+
+describe('handleListMyWork — allowlist enforcement (My Work spans all solutions)', () => {
+  const items = [
+    { id: 'i1', title: 'Allowed task', solution: 'solA', application: 'appA', field_str_value: 'x' },
+    { id: 'i2', title: 'PHI task', solution: 'solB', application: 'appB', field_str_value: 'secret' },
+  ];
+  const mkCtx = (cfg: any) => ({
+    config: { allowedSolutions: [], allowedApplications: [], deniedApplications: [], ...cfg },
+    client: { accountId: 'x8zfht5g', getMyWork: async () => ({ items, count: null }) },
+  }) as any;
+  const parse = (r: any) => JSON.parse(r.content[0].text);
+
+  it('returns items from all solutions when no allowlist is set', async () => {
+    const out = parse(await handleListMyWork({}, mkCtx({})));
+    expect(out.items.map((i: any) => i.id).sort()).toEqual(['i1', 'i2']);
+  });
+  it('drops items outside the solution allowlist (even with no solutionId filter)', async () => {
+    const out = parse(await handleListMyWork({}, mkCtx({ allowedSolutions: ['solA'] })));
+    expect(out.items.map((i: any) => i.id)).toEqual(['i1']);
+    expect(JSON.stringify(out)).not.toContain('secret');
+  });
+  it('respects the application denylist', async () => {
+    const out = parse(await handleListMyWork({}, mkCtx({ deniedApplications: ['appA'] })));
+    expect(out.items.map((i: any) => i.id)).toEqual(['i2']);
+  });
+});
 
 // Anchored "now" so overdue logic is deterministic.
 const NOW = new Date('2026-06-14T00:00:00.000Z').getTime();

@@ -50,6 +50,47 @@ function isEnabled(a: Automation): boolean | null {
   return null; // pending / unknown
 }
 
+/** `user_status` is the user's ON/OFF toggle ("USER_ENABLED"/"USER_DISABLED") — distinct from the
+ * engine-computed `system_status` (validity). This is the switch shown in the automation list. */
+export function userEnabled(a: Automation): boolean | null {
+  const u = (a as { user_status?: unknown }).user_status;
+  if (typeof u !== 'string') return null;
+  if (/DISABLED|OFF/i.test(u)) return false;
+  if (/ENABLED|ON/i.test(u)) return true;
+  return null;
+}
+
+/** Valid output ids a trigger exposes: context outputs + record fields + condition fields. */
+function triggerOutputIds(desc: Record<string, any>): Set<string> {
+  const t = (desc?.['trigger'] ?? desc ?? {}) as Record<string, any>;
+  const ids = new Set<string>();
+  const add = (arr: unknown) => { if (Array.isArray(arr)) for (const o of arr) if (o && typeof o === 'object' && typeof (o as any).output_id === 'string') ids.add((o as any).output_id); };
+  add(t['outputs']); add(t['condition_fields']); add(t['record_list_output']?.fields);
+  return ids;
+}
+
+/** Collect every reference to a TRIGGER output found in an automation's action inputs. */
+export function triggerOutputRefs(a: Automation): Array<{ outputId: string; actionId: string; inputId: string }> {
+  const refs: Array<{ outputId: string; actionId: string; inputId: string }> = [];
+  for (const g of (Array.isArray(a.action_groups) ? a.action_groups : []) as Array<Record<string, any>>) {
+    for (const act of (g?.['actions']?.actions ?? [])) {
+      const actionId = act?.action_reference?.action_id ?? '?';
+      for (const inp of (act?.inputs ?? [])) {
+        const inputId = inp?.input_id ?? '?';
+        const walk = (o: any) => {
+          if (!o || typeof o !== 'object') return;
+          if (o.reference && o.reference.trigger_reference && typeof o.reference.output_id === 'string') {
+            refs.push({ outputId: o.reference.output_id, actionId, inputId });
+          }
+          for (const v of Object.values(o)) walk(v);
+        };
+        walk(inp.value);
+      }
+    }
+  }
+  return refs;
+}
+
 function actionTypes(a: Automation): string[] {
   const groups = Array.isArray(a.action_groups) ? a.action_groups : [];
   const types: string[] = [];
@@ -76,6 +117,7 @@ function slimAutomation(a: Automation): Record<string, unknown> {
   return {
     id: a.automation_id,
     name: a.label ?? null,
+    userEnabled: userEnabled(a),
     enabled: isEnabled(a),
     status: status.state,
     ...(status.reason ? { statusReason: status.reason } : {}),
@@ -564,6 +606,65 @@ export async function handleSetAutomationAiPrompt(args: Record<string, unknown>,
     await ctx.client.updateAutomation(payload);
     const summary = await fetchSummary(ctx, solutionId, automationId);
     return ok({ updated: true, automationId, aiActionInstanceId: target.action_reference?.instance_id ?? null, referencedFields: referencedSlugs, automation: summary, ...statusNote(summary) });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
+/**
+ * Validate an automation and surface the errors the SmartSuite UI shows inline — notably
+ * "Trigger output with id <id> not found", which happens when an action still references a trigger
+ * output (a field) that no longer exists (the field was deleted or its slug changed). We reproduce the
+ * UI check: resolve the trigger's current outputs (DynamicTriggerDescription) and flag any action-input
+ * reference to a trigger output that isn't in that set. Also reports the user ON/OFF toggle + engine status.
+ */
+export async function handleValidateAutomation(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const solutionId = args['solutionId'] as string;
+  const automationId = args['automationId'] as string;
+  if (!solutionId) return err('SMARTSUITE_VALIDATION_ERROR', 'solutionId is required.');
+  if (!automationId) return err('SMARTSUITE_VALIDATION_ERROR', 'automationId is required.');
+
+  try {
+    const a = await getAutomationById(ctx, solutionId, automationId);
+    if (!a) return err('SMARTSUITE_NOT_FOUND', `Automation "${automationId}" not found in solution ${solutionId}`);
+
+    let validIds: Set<string> | null = null;
+    if (a.trigger) {
+      try { validIds = triggerOutputIds(await ctx.client.describeAutomationTrigger(a.trigger, solutionId)); }
+      catch { validIds = null; }
+    }
+
+    // Group trigger-output references by the referenced id; flag those the trigger no longer exposes.
+    const refs = triggerOutputRefs(a);
+    const missing = new Map<string, Array<{ actionId: string; inputId: string }>>();
+    if (validIds) {
+      for (const r of refs) {
+        if (!validIds.has(r.outputId)) {
+          const uses = missing.get(r.outputId) ?? [];
+          uses.push({ actionId: r.actionId, inputId: r.inputId });
+          missing.set(r.outputId, uses);
+        }
+      }
+    }
+    const errors = [...missing.entries()].map(([outputId, usedIn]) => ({
+      type: 'trigger-output-not-found',
+      message: `Trigger output with id ${outputId} not found`,
+      outputId,
+      usedIn,
+    }));
+
+    const status = automationStatus(a);
+    return ok({
+      automationId,
+      label: a.label ?? null,
+      userEnabled: userEnabled(a),
+      status: status.state,
+      ...(status.reason ? { statusReason: status.reason } : {}),
+      valid: errors.length === 0 && validIds !== null,
+      errorCount: errors.length,
+      errors,
+      ...(validIds === null ? { note: 'Could not resolve the trigger to check output references; reference errors were not evaluated.' } : {}),
+    });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }

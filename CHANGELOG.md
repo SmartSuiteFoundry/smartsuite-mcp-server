@@ -3,6 +3,20 @@
 All notable changes to the SmartSuite MCP Server. Versions marked _(unreleased)_ are built and
 deployed as incremental `.mcpb` artifacts but not yet published as a GitHub release.
 
+## 0.9.10
+### Security
+- **Allowlist is now enforced on every tool call.** Previously `SMARTSUITE_ALLOWED_SOLUTIONS`/`SMARTSUITE_ALLOWED_APPLICATIONS` were only checked by a few write tools — reads (`get_record`, `list/query/search records`, `describe_application`, views/dashboards/automations, …) were not gated, and `SMARTSUITE_ALLOWED_SOLUTIONS` wasn't enforced anywhere. A central chokepoint now applies allow/deny to **all** calls: it resolves the solution/application a call targets (including tools identified only by a view/dashboard/widget id) and blocks anything outside the allowlist or in the denylist.
+- **`list_solutions` and `list_applications` no longer reveal out-of-scope items** when an allowlist is set — so a caller can't even discover other solutions to try to reach them.
+- **`list_my_work` is filtered too.** My Work spans every solution and carries no scoping argument, so the chokepoint can't gate it; the handler now drops items whose solution/application is outside the allowlist (or denied), which otherwise leaked task titles and record references from out-of-scope solutions.
+- **`get_file_url` is disabled while an allowlist is active** — a raw file handle isn't scoped to a solution, so it could otherwise reach files outside the allowed solutions.
+- **Allowlist fields are now editable in the Claude Desktop connector settings** — added Allowed Solutions / Allowed Applications / Denied Applications to the MCPB manifest (they previously had no config UI field, so `.mcpb` installs couldn't set them).
+### Fixed
+- **Tables created via MCP could end up with an empty record term, which broke grid/list-view widgets on dashboards built against them** (a whole dashboard came out empty). `create_application` now always sets a non-empty record term ("what each record is called") explicitly — default `"Record"`, or pass `recordTerm` (e.g. "Request") — instead of relying on the server's auto-default. (The API rejects an empty term and normally defaults it, but it had intermittently come through empty.)
+### Added
+- **`smartsuite_validate_automation`** — reads the automation errors the SmartSuite UI shows inline, notably "Trigger output with id <id> not found" (an action references a trigger output / field that no longer exists because the field was deleted or its slug changed). It resolves the trigger's current outputs and flags every action-input reference to a missing one, returning the error text, the missing `outputId`, and where it's used. Also reports `userEnabled` (the ON/OFF toggle) and engine `status`. Works even in solutions where listing automations 500s (uses GetAutomation).
+### Changed
+- Automation summaries (`list`/`describe`) now include `userEnabled` — the user's ON/OFF toggle (`user_status`), distinct from `enabled`/`status` which reflect the engine's computed validity. (An automation can be toggled ON yet engine-disabled because it's invalid.)
+
 ## 0.9.8
 ### Fixed
 - **Automations became unreadable in solutions that contain an AI action.** SmartSuite's `ListAutomations` (which every automation tool used) returns a hard 500 for a whole solution when it contains the AI "ai-custom-prompt" action — so `describe_automation`, `describe_automation_step`, and `update_automation` all failed there. They now fetch single automations via `GetAutomation` (which works), and `list_automations` returns a clear explanation instead of a raw 500.

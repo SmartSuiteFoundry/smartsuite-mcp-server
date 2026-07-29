@@ -24,6 +24,7 @@ const CAPABILITIES: Array<{ request: string; tools: string[] }> = [
   { request: 'Create a table', tools: ['smartsuite_create_application'] },
   { request: 'Set an AI field dynamic prompt', tools: ['smartsuite_create_field', 'smartsuite_update_field'] },
   { request: 'Set a workflow AI-action dynamic prompt', tools: ['smartsuite_set_automation_ai_prompt'] },
+  { request: 'Read automation errors (broken trigger-output refs)', tools: ['smartsuite_validate_automation'] },
   { request: 'Create rollup / lookup fields', tools: ['smartsuite_create_field'] },
   { request: 'Delete a field', tools: ['smartsuite_delete_field'] },
   { request: 'Create, modify and delete views', tools: ['smartsuite_create_view', 'smartsuite_update_view', 'smartsuite_delete_view'] },

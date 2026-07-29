@@ -18,7 +18,11 @@ export async function handleListSolutions(
 ): Promise<ToolResult> {
   try {
     const solutions = await ctx.client.listSolutions();
-    return ok({ items: solutions, count: solutions.length });
+    // Governance: when a solution allowlist is set, other solutions must not even be visible here — a
+    // listing that revealed them would let a caller discover (and try to reach) out-of-scope data.
+    const allowed = ctx.config.allowedSolutions;
+    const visible = allowed.length > 0 ? solutions.filter((s) => allowed.includes((s as { id?: string }).id ?? '')) : solutions;
+    return ok({ items: visible, count: visible.length });
   } catch (e) {
     const er = toErrorResponse(e);
     return { content: [{ type: 'text', text: JSON.stringify({ error: er }, null, 2) }], isError: true };
