@@ -1,7 +1,7 @@
 import { ToolContext, ToolResult, ok } from './context.js';
 import { toErrorResponse } from '../errors.js';
 import { ApplicationSummary, FieldDefinition, StructureLayout } from '../types/smartsuite.js';
-import { helpTextOf } from './fields.js';
+import { helpTextOf, parseFieldSpecs, fieldDefOf, FieldSpec } from './fields.js';
 
 function fieldCountOf(app: ApplicationSummary): number {
   return app.fields_count?.total ?? app.structure?.length ?? 0;
@@ -241,6 +241,11 @@ export async function handleListDeletedApplications(args: Record<string, unknown
  * title field. We also always send a non-empty `record_term` ("what each record is called") rather than
  * relying on the server's auto-default — an empty record term has been seen to break downstream
  * list-view/grid widget creation against the table. Dry-run preview unless confirm:true.
+ *
+ * Optional `fields[]` are provisioned inline in the same create call, with the slugs we generate preserved.
+ * This is the only true bulk field path SmartSuite offers — one request for N fields, versus N ~1s
+ * `add_field` round-trips against an existing table — so prefer it whenever the table is new. The platform
+ * adds its own default field set (title/description/assigned_to/status/…) alongside them.
  */
 export async function handleCreateApplication(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   if (ctx.config.mode === 'readonly') {
@@ -259,13 +264,42 @@ export async function handleCreateApplication(args: Record<string, unknown>, ctx
   if (!name?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'name is required.');
   if (!solutionId) return err('SMARTSUITE_VALIDATION_ERROR', 'solutionId is required.');
 
+  // `fields` is optional here (unlike create_fields, where it is the point of the call).
+  let specs: FieldSpec[] = [];
+  if (args['fields'] !== undefined) {
+    const parsed = parseFieldSpecs(args['fields']);
+    if ('error' in parsed) return err('SMARTSUITE_VALIDATION_ERROR', parsed.error);
+    specs = parsed.specs;
+    // An aiPrompt would have to reference fields of a table that does not exist yet.
+    const withPrompt = specs.find((s) => s.aiPrompt);
+    if (withPrompt) {
+      return err('SMARTSUITE_VALIDATION_ERROR', `fields["${withPrompt.label}"].aiPrompt is not supported when creating a table — the fields it would reference don't exist yet. Create the table first, then set the prompt with smartsuite_create_fields or smartsuite_update_field.`);
+    }
+  }
+
   if (!confirm) {
-    return ok({ dryRun: true, wouldCreate: { name, solutionId, recordTerm }, hint: 'Set confirm=true to create the table. A default "Title" primary field is added automatically.' });
+    return ok({
+      dryRun: true,
+      wouldCreate: {
+        name,
+        solutionId,
+        recordTerm,
+        ...(specs.length ? { fields: specs.map((s) => ({ slug: s.slug, label: s.label, fieldType: s.fieldType })) } : {}),
+      },
+      hint: `Set confirm=true to create the table. A default "Title" primary field is added automatically${specs.length ? `, alongside the ${specs.length} supplied field(s) — all provisioned in this single call` : ''}.`,
+    });
   }
 
   try {
-    const app = await ctx.client.createApplication({ name, solution: solutionId, record_term: recordTerm });
-    const primary = (app.structure ?? []).find((f) => (f.params as { primary?: boolean } | undefined)?.primary) ?? (app.structure ?? [])[0];
+    const app = await ctx.client.createApplication({
+      name,
+      solution: solutionId,
+      record_term: recordTerm,
+      ...(specs.length ? { structure: specs.map(fieldDefOf) } : {}),
+    });
+    const structure = app.structure ?? [];
+    const primary = structure.find((f) => (f.params as { primary?: boolean } | undefined)?.primary) ?? structure[0];
+    const present = new Set(structure.map((f) => f.slug));
     return ok({
       created: true,
       application: {
@@ -276,6 +310,12 @@ export async function handleCreateApplication(args: Record<string, unknown>, ctx
         recordTerm: (app as { record_term?: string }).record_term ?? recordTerm,
         primaryField: primary ? { slug: primary.slug, label: primary.label } : null,
       },
+      ...(specs.length
+        ? {
+            fields: specs.map((s) => ({ slug: s.slug, label: s.label, fieldType: s.fieldType, created: present.has(s.slug) })),
+            fieldsCreated: specs.filter((s) => present.has(s.slug)).length,
+          }
+        : {}),
     });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };

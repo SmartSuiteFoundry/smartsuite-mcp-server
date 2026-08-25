@@ -123,6 +123,9 @@ export async function handleUpdateRecords(
   const denied = checkApplicationAccess(applicationId, ctx);
   if (denied) return denied;
 
+  if (!Array.isArray(records) || records.length === 0) {
+    return err('SMARTSUITE_VALIDATION_ERROR', 'records must be a non-empty array of {recordId, fields} objects.');
+  }
   if (records.length > ctx.config.maxBatchWrites) {
     return err('LIMIT_EXCEEDED', `Batch size ${records.length} exceeds maximum of ${ctx.config.maxBatchWrites}`);
   }
@@ -144,21 +147,30 @@ export async function handleUpdateRecords(
     const items = records.map((r) => ({ id: r.recordId, ...r.fields }));
     const res = await ctx.client.bulkUpdateRecords(applicationId, items);
 
+    // The endpoint silently drops ids it cannot match, so anything we asked for that did not come
+    // back is a failure the API never told us about. Diff to surface it rather than reporting 0.
+    const updatedIds = new Set(res.successful_items.map((r) => r.id));
+    const missing = records
+      .map((r, index) => ({ index, recordId: r.recordId }))
+      .filter((r) => !updatedIds.has(r.recordId))
+      .map((r) => ({ ...r, reason: 'Record was not updated (id not found, deleted, or not writable).' }));
+    const failures = [...res.failed_items, ...missing];
+
     writeAudit(ctx.logger, {
       tool: 'smartsuite_update_records',
       accountId: ctx.config.accountId,
       applicationId,
       recordIds: records.map((r) => r.recordId),
       mode: ctx.config.mode,
-      success: true,
+      success: failures.length === 0,
       errorCode: null,
     });
 
     return ok({
       dryRun: false,
       updated: res.successful_items.length,
-      failed: res.failed_items.length,
-      failures: res.failed_items,
+      failed: failures.length,
+      failures,
     });
   } catch (e) {
     const er = toErrorResponse(e);

@@ -15,6 +15,8 @@ const CAPABILITIES: Array<{ request: string; tools: string[] }> = [
   { request: 'Rename fields', tools: ['smartsuite_update_field'] },
   { request: 'Create and update field help descriptions', tools: ['smartsuite_set_field_help_text'] },
   { request: 'Add field types and change field settings', tools: ['smartsuite_create_field', 'smartsuite_update_field'] },
+  { request: 'Bulk-add fields to an existing table', tools: ['smartsuite_create_fields'] },
+  { request: 'Create a table with all its fields in one call', tools: ['smartsuite_create_application'] },
   { request: 'Hide/show fields', tools: ['smartsuite_set_field_visibility'] },
   { request: 'Add/modify/delete display logic (field/section/tab)', tools: ['smartsuite_set_display_logic'] },
   { request: 'Move attachments from one field to another', tools: ['smartsuite_move_attachments'] },

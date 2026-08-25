@@ -77,13 +77,26 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_application',
-    description: 'Create a new table (application) in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply a name and the solutionId. The table is created with a default "Title" primary field and a record term ("what each record is called", default "Record") — the record term is always set explicitly so it is never left empty (an empty record term can break list-view/grid widget creation against the table). Add more fields with smartsuite_create_field. Dry-run preview unless confirm:true.',
+    description: 'Create a new table (application) in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply a name and the solutionId. The table is created with a default "Title" primary field and a record term ("what each record is called", default "Record") — the record term is always set explicitly so it is never left empty (an empty record term can break list-view/grid widget creation against the table). PASS `fields` TO CREATE THE TABLE AND ALL ITS FIELDS IN ONE REQUEST: an array of { fieldType, label, params? } entries (same shape as smartsuite_create_field). This is the ONLY true bulk field path SmartSuite offers and it is dramatically faster than adding fields afterwards — one request for all of them, versus ~1s per field via smartsuite_create_fields against an existing table. So when a table is new, always create its fields here. SmartSuite also adds its own default field set (Title, Description, Assigned To, Status, Due Date, Priority, …) alongside yours. Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'The table name.' },
         solutionId: { type: 'string', description: 'The solution to create the table in.' },
         recordTerm: { type: 'string', description: 'What each record is called (singular), e.g. "Request". Defaults to "Record".' },
+        fields: {
+          type: 'array',
+          description: 'Optional: fields to provision inline with the table, in order — all in this single request. Each entry: { fieldType, label, params? }, same semantics as smartsuite_create_field. aiPrompt is not supported here (the fields it would reference do not exist yet); set AI prompts after the table exists.',
+          items: {
+            type: 'object',
+            properties: {
+              fieldType: { type: 'string', description: 'SmartSuite field type, e.g. textfield, numberfield, singleselectfield, linkedrecordfield.' },
+              label: { type: 'string', description: 'Field display label.' },
+              params: { type: 'object', description: 'Optional sparse field params; omit to accept type defaults.' },
+            },
+            required: ['fieldType', 'label'],
+          },
+        },
         confirm: { type: 'boolean', description: 'Set true to create; otherwise returns a dry-run preview.' },
       },
       required: ['name', 'solutionId'],
@@ -182,7 +195,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_formula_field',
-    description: 'Create a new formula field in a SmartSuite application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. The expression is validated first — an invalid formula is never created. Without confirm:true returns a dry-run preview (validation result + what would be created); set confirm:true to create. The field slug is generated automatically.',
+    description: 'Create a new formula field in a SmartSuite application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. The expression is validated first — an invalid formula is never created. Without confirm:true returns a dry-run preview (validation result + what would be created); set confirm:true to create. The field slug is generated automatically and the field is appended to the end of the table (SmartSuite ignores field positioning on create — use smartsuite_move_layout_field to rearrange).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -190,7 +203,6 @@ export const TOOL_DEFINITIONS = [
         label: { type: 'string', description: 'Display label for the new field' },
         formula: { type: 'string', description: 'The formula expression' },
         returnType: { type: 'string', description: 'Output field type (default textfield). One of: textfield, numberfield, datefield, currencyfield, percentfield, singleselectfield, statusfield, yesnofield, emailfield, phonefield, durationfield, timefield, daterangefield, duedatefield.' },
-        afterFieldSlug: { type: 'string', description: 'Optional: place the new field immediately after this existing field slug (defaults to last field).' },
         confirm: { type: 'boolean', description: 'Must be true to actually create. Omit/false for a validate-only dry run.' },
       },
       required: ['applicationId', 'label', 'formula'],
@@ -241,10 +253,36 @@ export const TOOL_DEFINITIONS = [
         label: { type: 'string', description: 'Field display label.' },
         params: { type: 'object', description: 'Optional sparse field params; omit to accept type defaults. See the tool description for which params each type needs.' },
         aiPrompt: { type: 'string', description: 'Optional: make this an AI-populated field. Plain-text prompt where {{field_slug}} inserts a live reference to another field. The tool builds the rich-text AI instructions (with field pills) and enables the AI agent.' },
-        afterFieldSlug: { type: 'string', description: 'Optional: place the new field after this field slug (default: end).' },
         confirm: { type: 'boolean', description: 'Must be true to create (default false = preview).' },
       },
       required: ['applicationId', 'fieldType', 'label'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_create_fields',
+    description: 'Create MULTIPLE fields in one call — use this instead of calling smartsuite_create_field repeatedly. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Pass applicationId and `fields`: an array of { fieldType, label, params?, aiPrompt? } entries with exactly the same shape and semantics as smartsuite_create_field (see that tool for the per-type params guide). Slugs are generated. Every entry is validated before anything is written, so a malformed entry fails the whole call cleanly rather than half-creating the batch. Note SmartSuite has no bulk add-field API, so this performs one request per field (~1s each — a 20-field batch takes ~20s); it is sequential on purpose, because parallel field adds get rate-limited and silently drop fields. If a field fails, the batch continues and the result reports every field individually with created:true/false plus the error, so you can re-call with just the failures. Fields append to the end of the table in the order given (SmartSuite ignores field positioning on create — use smartsuite_move_layout_field to rearrange). TO CREATE A TABLE AND ITS FIELDS TOGETHER, pass `fields` to smartsuite_create_application instead — that provisions all of them in a SINGLE request and is far faster. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID to add the fields to.' },
+        fields: {
+          type: 'array',
+          description: 'The fields to create, in order. Each entry: { fieldType, label, params?, aiPrompt? } — same semantics as smartsuite_create_field.',
+          items: {
+            type: 'object',
+            properties: {
+              fieldType: { type: 'string', description: 'SmartSuite field type, e.g. textfield, numberfield, singleselectfield, linkedrecordfield, rollupfield.' },
+              label: { type: 'string', description: 'Field display label.' },
+              params: { type: 'object', description: 'Optional sparse field params; omit to accept type defaults.' },
+              aiPrompt: { type: 'string', description: 'Optional: make this an AI-populated field. {{field_slug}} references resolve against fields that ALREADY exist on the table (not others in this batch, whose slugs are generated here).' },
+            },
+            required: ['fieldType', 'label'],
+          },
+        },
+        confirm: { type: 'boolean', description: 'Must be true to create (default false = preview).' },
+      },
+      required: ['applicationId', 'fields'],
     },
     annotations: { readOnlyHint: false },
   },

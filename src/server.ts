@@ -15,7 +15,7 @@ import { handleDiagnostics } from './tools/diagnostics.js';
 import { handleListWorkspaces } from './tools/workspaces.js';
 import { handleListSolutions, handleGetSolution, handleCreateSolution } from './tools/solutions.js';
 import { handleListApplications, handleDescribeApplication, handleUpdateApplication, handleListDeletedApplications, handleCreateApplication } from './tools/applications.js';
-import { handleListFields, handleDescribeField, handleSetFieldHelpText, handleCreateField, handleUpdateField, handleDeleteField, handleListDeletedFields, handleRestoreField } from './tools/fields.js';
+import { handleListFields, handleDescribeField, handleSetFieldHelpText, handleCreateField, handleCreateFields, handleUpdateField, handleDeleteField, handleListDeletedFields, handleRestoreField } from './tools/fields.js';
 import {
   handleAnalyzeFormulas,
   handleValidateFormula,
@@ -112,6 +112,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_describe_field:        handleDescribeField,
   smartsuite_set_field_help_text:   handleSetFieldHelpText,
   smartsuite_create_field:          handleCreateField,
+  smartsuite_create_fields:         handleCreateFields,
   smartsuite_update_field:          handleUpdateField,
   smartsuite_delete_field:          handleDeleteField,
   smartsuite_list_deleted_fields:   handleListDeletedFields,

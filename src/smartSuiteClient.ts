@@ -365,16 +365,23 @@ export class SmartSuiteClient {
     };
   }
 
-  /** Add a new field. `prevSiblingSlug` positions it immediately after an existing field. */
+  /**
+   * Add a new field. New fields always append — to the end of `structure` and of the record-view layout.
+   *
+   * `field_position` is required (omitting it is a 400: `field_position: ["This field is required."]`) but
+   * its `prev_sibling_slug` value is *ignored*: verified against the live API, anchoring at the first field,
+   * a middle field, or even a slug that doesn't exist all returned 200 and appended. So we send an empty
+   * anchor purely to satisfy the requirement, and take no positioning argument — use `moveLayoutField` to
+   * place a field somewhere specific.
+   */
   async addField(
     applicationId: string,
     field: FieldDefinition,
-    prevSiblingSlug: string,
     opts: { autoFillLayout?: boolean } = {},
   ): Promise<unknown> {
     const result = await this.request<unknown>('POST', `/applications/${applicationId}/add_field/`, {
       field: { ...field, is_new: true },
-      field_position: { prev_sibling_slug: prevSiblingSlug },
+      field_position: { prev_sibling_slug: '' },
       // Place the new field in the record-view layout (otherwise it exists but isn't displayed).
       auto_fill_structure_layout: opts.autoFillLayout !== false,
     });
@@ -520,13 +527,21 @@ export class SmartSuiteClient {
     return { successful_items: res?.successful_items ?? [], failed_items: res?.failed_items ?? [] };
   }
 
+  /**
+   * Bulk update. Like bulk-create, this endpoint returns a BARE ARRAY of the updated records —
+   * not a {successful_items, failed_items} envelope — and it silently DROPS ids it cannot match
+   * (no failure entry is reported). Normalize to the envelope; callers derive failures by diffing
+   * the ids they asked for against the ids that came back.
+   */
   async bulkUpdateRecords(
     applicationId: string,
     records: Array<Record<string, unknown>>,
   ): Promise<BulkUpdateResponse> {
-    return this.request<BulkUpdateResponse>('PATCH', `/applications/${applicationId}/records/bulk/`, {
+    const res = await this.request<BulkUpdateResponse | SmartSuiteRecord[]>('PATCH', `/applications/${applicationId}/records/bulk/`, {
       items: records,
     });
+    if (Array.isArray(res)) return { successful_items: res, failed_items: [] };
+    return { successful_items: res?.successful_items ?? [], failed_items: res?.failed_items ?? [] };
   }
 
   async bulkDeleteRecords(applicationId: string, recordIds: string[]): Promise<void> {

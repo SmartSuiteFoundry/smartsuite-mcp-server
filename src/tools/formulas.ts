@@ -538,7 +538,6 @@ export async function handleCreateFormulaField(
   const label = args['label'] as string;
   const formula = args['formula'] as string;
   const returnType = (args['returnType'] as string) || 'textfield';
-  const afterFieldSlug = args['afterFieldSlug'] as string | undefined;
   const confirm = args['confirm'] === true;
 
   if (!label?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'label is required.');
@@ -566,15 +565,8 @@ export async function handleCreateFormulaField(
       });
     }
 
-    // Position after the named field, or default to the last field in the schema.
-    const schema = await ctx.client.getApplicationSchema(applicationId);
-    const fields = schema.structure ?? [];
-    const prevSiblingSlug = afterFieldSlug && fields.some((f) => f.slug === afterFieldSlug)
-      ? afterFieldSlug
-      : fields[fields.length - 1]?.slug;
-    if (!prevSiblingSlug) return err('SMARTSUITE_VALIDATION_ERROR', 'Could not determine a position; the application has no fields.');
-
-    await ctx.client.addField(applicationId, field, prevSiblingSlug);
+    // New fields always append; the API ignores any position anchor (see addField). Nothing to resolve.
+    await ctx.client.addField(applicationId, field);
     const fresh = await ctx.client.getApplicationSchema(applicationId, { forceRefresh: true });
     return ok({ created: true, mode: ctx.config.mode, field: createdFieldSummary(fresh, slug) ?? { slug, label, formula, returnType } });
   } catch (e) {

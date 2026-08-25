@@ -244,6 +244,163 @@ export function mergeFieldParams(existing: Record<string, unknown>, patch: Recor
   return { ...existing, ...patch };
 }
 
+/**
+ * Cap on fields per bulk call. Each `add_field` is its own ~1s round-trip (there is no bulk endpoint), so a
+ * big batch is slow and more exposed to rate limiting; keeping batches bounded also keeps the dry-run
+ * preview reviewable.
+ */
+export const MAX_BULK_FIELDS = 50;
+
+export interface FieldSpec {
+  slug: string;
+  label: string;
+  fieldType: string;
+  params: Record<string, unknown>;
+  aiPrompt?: string;
+}
+
+/**
+ * Validate a caller-supplied `fields[]` array into specs with generated slugs. Every entry is checked
+ * before anything is written, so a malformed entry can't leave a half-created batch behind. Returns an
+ * error *message* rather than a ToolResult so both create_fields and create_application can frame it.
+ */
+export function parseFieldSpecs(raw: unknown, max = MAX_BULK_FIELDS): { specs: FieldSpec[] } | { error: string } {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { error: 'fields must be a non-empty array of { fieldType, label, params? } objects.' };
+  }
+  if (raw.length > max) {
+    return { error: `fields has ${raw.length} entries; the maximum per call is ${max}. Split it into smaller batches.` };
+  }
+  const specs: FieldSpec[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entry = raw[i];
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return { error: `fields[${i}] must be an object with fieldType and label.` };
+    }
+    const rec = entry as Record<string, unknown>;
+    const fieldType = rec['fieldType'];
+    const label = rec['label'];
+    if (typeof fieldType !== 'string' || !fieldType.trim()) {
+      return { error: `fields[${i}].fieldType is required (e.g. textfield, numberfield, singleselectfield).` };
+    }
+    if (typeof label !== 'string' || !label.trim()) {
+      return { error: `fields[${i}].label is required.` };
+    }
+    const rawParams = rec['params'];
+    const params = rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
+      ? { ...(rawParams as Record<string, unknown>) }
+      : {};
+    const aiPrompt = typeof rec['aiPrompt'] === 'string' && rec['aiPrompt'].trim() ? rec['aiPrompt'] : undefined;
+    specs.push({ slug: generateFieldSlug(), label, fieldType, params, aiPrompt });
+  }
+  return { specs };
+}
+
+/** Turn a spec into the field definition sent to SmartSuite (choice normalization included). */
+export function fieldDefOf(spec: FieldSpec): FieldDefinition {
+  return buildFieldDef(spec.slug, spec.label, spec.fieldType, normalizeChoices(spec.fieldType, spec.params));
+}
+
+/**
+ * Resolve `aiPrompt` templates on a batch of specs against the application schema, fetching the schema at
+ * most once for the whole batch. Returns an error message if any prompt references an unknown slug.
+ *
+ * A prompt can only reference fields that already exist — slugs for fields created in the same batch are
+ * generated here, so a caller has no way to name them.
+ */
+async function applyBatchAiPrompts(
+  specs: FieldSpec[],
+  applicationId: string,
+  ctx: ToolContext,
+): Promise<string | null> {
+  if (!specs.some((s) => s.aiPrompt)) return null;
+  const schema = await ctx.client.getApplicationSchema(applicationId);
+  for (const spec of specs) {
+    if (!spec.aiPrompt) continue;
+    const applied = applyAiPrompt(spec.params, spec.aiPrompt, schema.structure ?? []);
+    if (applied.unknownSlugs.length) {
+      return `aiPrompt for "${spec.label}" references unknown field slug(s): ${applied.unknownSlugs.join(', ')}. Use {{slug}} with slugs from smartsuite_list_fields.`;
+    }
+    spec.params = applied.params;
+  }
+  return null;
+}
+
+/**
+ * Create many fields in one tool call.
+ *
+ * SmartSuite has no bulk add-field endpoint: `add_field` takes exactly one field, and `structure` is not
+ * mutable on an existing table (any PATCH/PUT carrying a `structure` key — even an empty array — is a 500).
+ * So this loops sequentially, N fields = N round-trips at roughly 1s each. The loop is deliberately serial:
+ * parallel adds get rate-limited (429) rather than corrupting the schema, so concurrency loses fields
+ * instead of saving time; a serial loop plus the client's 429 backoff is what actually lands all N.
+ *
+ * A failure does not abort the batch — every field is attempted and reported individually, so a partial
+ * result is diagnosable and the caller can retry just the failures. To create a table *and* its fields,
+ * prefer smartsuite_create_application with `fields`: that provisions them all in a single call.
+ */
+export async function handleCreateFields(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = schemaWriteGuard(ctx);
+  if (blocked) return blocked;
+
+  const applicationId = args['applicationId'] as string;
+  const confirm = args['confirm'] === true;
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
+
+  const parsed = parseFieldSpecs(args['fields']);
+  if ('error' in parsed) return err('SMARTSUITE_VALIDATION_ERROR', parsed.error);
+  const { specs } = parsed;
+
+  try {
+    const promptError = await applyBatchAiPrompts(specs, applicationId, ctx);
+    if (promptError) return err('SMARTSUITE_VALIDATION_ERROR', promptError);
+
+    if (!confirm) {
+      return ok({
+        dryRun: true,
+        applicationId,
+        count: specs.length,
+        would: specs.map((s) => ({ slug: s.slug, label: s.label, fieldType: s.fieldType, paramKeys: Object.keys(s.params).sort() })),
+        note: `Creates ${specs.length} field(s) via ${specs.length} sequential API calls (~1s each, so roughly ${specs.length}s). Fields append to the end of the table in this order; use smartsuite_move_layout_field to reposition. SmartSuite fills type defaults for omitted params. Re-call with confirm:true to create.`,
+      });
+    }
+
+    const results: Array<Record<string, unknown>> = [];
+    for (const spec of specs) {
+      try {
+        await ctx.client.addField(applicationId, fieldDefOf(spec));
+        results.push({ slug: spec.slug, label: spec.label, fieldType: spec.fieldType });
+      } catch (e) {
+        results.push({ slug: spec.slug, label: spec.label, fieldType: spec.fieldType, error: toErrorResponse(e).message });
+      }
+    }
+
+    // One schema read for the whole batch (a per-field re-read would be N extra full-schema fetches), and
+    // it is the authority on what landed — add_field returns an empty body.
+    const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
+    const bySlug = new Map((app.structure ?? []).map((f) => [f.slug, f]));
+    for (const r of results) {
+      const found = bySlug.get(r['slug'] as string) as (FieldDefinition & Record<string, unknown>) | undefined;
+      r['created'] = found != null;
+      if (found) r['field'] = fieldSummary(found);
+    }
+
+    const created = results.filter((r) => r['created'] === true).length;
+    const failed = specs.length - created;
+    return ok({
+      created,
+      failed,
+      total: specs.length,
+      ...(failed > 0
+        ? { partial: true, hint: 'Some fields were not created. The created ones are already in place — re-call with only the failed entries.' }
+        : {}),
+      fields: results,
+    });
+  } catch (e) {
+    return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
+  }
+}
+
 function fieldSummary(f: (FieldDefinition & Record<string, unknown>) | undefined): Record<string, unknown> | null {
   if (!f) return null;
   return { slug: f.slug, label: f.label, fieldType: f.field_type, paramKeys: Object.keys(f.params ?? {}).sort() };
@@ -252,7 +409,9 @@ function fieldSummary(f: (FieldDefinition & Record<string, unknown>) | undefined
 /**
  * Create a field of any type. The caller supplies field_type + (optional, sparse) params; SmartSuite
  * fills type defaults. The tool generates the slug, places the field in the record-view layout, and
- * re-reads to report the result (add_field returns an empty body). Schema-write gated; dry-run unless confirm.
+ * re-reads to report the result (add_field returns an empty body). New fields always append (the API
+ * ignores any position anchor — see `addField`); use smartsuite_move_layout_field to place one elsewhere.
+ * Schema-write gated; dry-run unless confirm. For several fields at once, use smartsuite_create_fields.
  */
 export async function handleCreateField(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   const blocked = schemaWriteGuard(ctx);
@@ -261,7 +420,6 @@ export async function handleCreateField(args: Record<string, unknown>, ctx: Tool
   const applicationId = args['applicationId'] as string;
   const fieldType = args['fieldType'] as string;
   const label = args['label'] as string;
-  const afterFieldSlug = (args['afterFieldSlug'] as string | undefined) ?? '';
   let params = (args['params'] && typeof args['params'] === 'object' && !Array.isArray(args['params'])) ? (args['params'] as Record<string, unknown>) : {};
   const aiPrompt = args['aiPrompt'] as string | undefined;
   const confirm = args['confirm'] === true;
@@ -282,9 +440,9 @@ export async function handleCreateField(args: Record<string, unknown>, ctx: Tool
     const slug = generateFieldSlug();
     const field = buildFieldDef(slug, label, fieldType, normalizeChoices(fieldType, params));
     if (!confirm) {
-      return ok({ dryRun: true, would: { slug, fieldType, label, paramKeys: Object.keys(params).sort(), afterFieldSlug: afterFieldSlug || '(end)' }, note: 'SmartSuite fills type defaults for omitted params. Re-call with confirm:true to create.' });
+      return ok({ dryRun: true, would: { slug, fieldType, label, paramKeys: Object.keys(params).sort(), position: '(appended to the end)' }, note: 'SmartSuite fills type defaults for omitted params. Re-call with confirm:true to create.' });
     }
-    await ctx.client.addField(applicationId, field, afterFieldSlug);
+    await ctx.client.addField(applicationId, field);
     const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
     const created = (app.structure ?? []).find((f) => f.slug === slug) as (FieldDefinition & Record<string, unknown>) | undefined;
     return ok({ created: true, slug, field: fieldSummary(created) });
