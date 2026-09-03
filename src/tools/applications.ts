@@ -93,6 +93,11 @@ export function normalizeField(f: FieldDefinition, verbosity: FieldVerbosity = '
     out['helpText'] = help.helpText;
     out['helpTextFormat'] = help.helpTextFormat;
   }
+  // Column span in the record view. It lives on the FIELD (params.width: 1 = half, 2 = full),
+  // not in structure_layout — a row like ["slug", ""] is a half-width field with an empty right
+  // slot, and only width:2 spans both columns. Surfaced here because it is otherwise invisible
+  // outside verbosity:"full", which made it undiscoverable. Set it with update_field.
+  if (f.params.width === 2) out['fullWidth'] = true;
   if (f.params.linked_field_slug) out['linkedFieldSlug'] = f.params.linked_field_slug;
   if (f.params.display_format) out['displayFormat'] = f.params.display_format;
   if (f.params.ai_agent) out['isAiField'] = f.params.ai_agent.enabled ?? false;

@@ -3,6 +3,7 @@ import { ToolContext, ToolResult, ok, err } from './context.js';
 import { toErrorResponse } from '../errors.js';
 import { ApplicationDetail, FieldDefinition } from '../types/smartsuite.js';
 import { helpTextOf } from './fields.js';
+import { lintFormula, explainApiFailure, FormulaLintWarning } from './formulaLint.js';
 
 /**
  * Formula analysis for a SmartSuite application.
@@ -471,6 +472,18 @@ export function buildFormulaFieldDef(slug: string, label: string, formula: strin
   };
 }
 
+/**
+ * Fold lint output into a response. Warnings are advisory — SmartSuite's verdict decides
+ * validity — so an empty result adds no keys at all rather than noise on every clean call.
+ */
+function lintSummary(lint: FormulaLintWarning[]): Record<string, unknown> {
+  if (!lint.length) return {};
+  return {
+    lint,
+    lintNote: 'Static checks for the traps SmartSuite\'s validator accepts (it checks syntax, not semantics). Advisory only — they never block a write.',
+  };
+}
+
 function schemaWriteGuard(ctx: ToolContext): ToolResult | null {
   if (ctx.config.mode === 'readonly') {
     return err('MCP_MODE_BLOCKED', 'Schema writes are blocked in readonly mode. Set SMARTSUITE_MCP_MODE=readwrite or admin.');
@@ -502,8 +515,20 @@ export async function handleValidateFormula(
     const field = returnType
       ? buildFormulaFieldDef(slug, label, formula, returnType)
       : ({ slug, label, field_type: 'formulafield', params: { formula } } as FieldDefinition);
-    const result = await ctx.client.validateFormula(applicationId, field);
-    return ok({ applicationId, formula, returnType: returnType ?? null, ...result });
+    const [result, schema] = await Promise.all([
+      ctx.client.validateFormula(applicationId, field),
+      ctx.client.getApplicationSchema(applicationId).catch(() => undefined),
+    ]);
+    const lint = lintFormula(formula, schema, returnType ?? 'textfield');
+    const explanation = result.valid ? null : explainApiFailure(result.message ?? '', formula);
+    return ok({
+      applicationId,
+      formula,
+      returnType: returnType ?? null,
+      ...result,
+      ...(explanation ? { explanation } : {}),
+      ...lintSummary(lint),
+    });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
@@ -551,24 +576,40 @@ export async function handleCreateFormulaField(
     const field = buildFormulaFieldDef(slug, label, formula, returnType);
 
     // Pre-flight validation — never create an invalid formula.
-    const verdict = await ctx.client.validateFormula(applicationId, field);
+    const [verdict, schema] = await Promise.all([
+      ctx.client.validateFormula(applicationId, field),
+      ctx.client.getApplicationSchema(applicationId).catch(() => undefined),
+    ]);
     if (!verdict.valid) {
-      return err('SMARTSUITE_VALIDATION_ERROR', `Formula is invalid: ${verdict.message ?? 'unknown error'}`, { code: verdict.code });
+      const explanation = explainApiFailure(verdict.message ?? '', formula);
+      return err('SMARTSUITE_VALIDATION_ERROR', `Formula is invalid: ${verdict.message ?? 'unknown error'}`, {
+        code: verdict.code,
+        ...(explanation ? { explanation } : {}),
+      });
     }
 
+    const lint = lintFormula(formula, schema, returnType);
     if (!confirm) {
       return ok({
         dryRun: true,
         validation: verdict,
+        ...lintSummary(lint),
         wouldCreate: { applicationId, label, formula, returnType, slug },
-        hint: 'Formula validates. Set confirm=true to create the field.',
+        hint: lint.length
+          ? 'Formula validates, but the lint pass raised notes SmartSuite cannot catch — review them, then set confirm=true to create.'
+          : 'Formula validates. Set confirm=true to create the field.',
       });
     }
 
     // New fields always append; the API ignores any position anchor (see addField). Nothing to resolve.
     await ctx.client.addField(applicationId, field);
     const fresh = await ctx.client.getApplicationSchema(applicationId, { forceRefresh: true });
-    return ok({ created: true, mode: ctx.config.mode, field: createdFieldSummary(fresh, slug) ?? { slug, label, formula, returnType } });
+    return ok({
+      created: true,
+      mode: ctx.config.mode,
+      field: createdFieldSummary(fresh, slug) ?? { slug, label, formula, returnType },
+      ...lintSummary(lint),
+    });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
@@ -618,13 +659,23 @@ export async function handleUpdateFormulaField(
 
     const verdict = await ctx.client.validateFormula(applicationId, updated);
     if (!verdict.valid) {
-      return err('SMARTSUITE_VALIDATION_ERROR', `Updated formula is invalid: ${verdict.message ?? 'unknown error'}`, { code: verdict.code });
+      const explanation = explainApiFailure(verdict.message ?? '', String(updated.params.formula ?? ''));
+      return err('SMARTSUITE_VALIDATION_ERROR', `Updated formula is invalid: ${verdict.message ?? 'unknown error'}`, {
+        code: verdict.code,
+        ...(explanation ? { explanation } : {}),
+      });
     }
 
+    const lint = lintFormula(
+      String(updated.params.formula ?? ''),
+      schema,
+      updated.params.target_field_structure?.field_type,
+    );
     if (!confirm) {
       return ok({
         dryRun: true,
         validation: verdict,
+        ...lintSummary(lint),
         wouldUpdate: {
           applicationId,
           fieldSlug,
@@ -644,6 +695,7 @@ export async function handleUpdateFormulaField(
     return ok({
       updated: true,
       mode: ctx.config.mode,
+      ...lintSummary(lint),
       note: 'Change submitted. SmartSuite applies formula edits via a background migration, so it may take a few seconds to take effect; re-run smartsuite_analyze_formulas to confirm.',
       field: {
         slug: fieldSlug,

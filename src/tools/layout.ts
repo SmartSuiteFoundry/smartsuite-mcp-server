@@ -1,5 +1,6 @@
 import { ToolContext, ToolResult, ok, err } from './context.js';
 import { toErrorResponse } from '../errors.js';
+import { FieldDefinition } from '../types/smartsuite.js';
 
 // Record-view layout sections. A section is an entry in a mode body's `sections[]` PLUS a marker
 // row in that body's `rows` (a pair `["section__slug",""]` in fifty_fifty, a flat `"section__slug"`
@@ -228,6 +229,58 @@ function removeFieldFromContainer(container: AnyObj, slug: string): void {
     if (Array.isArray(b.seventy)) b.seventy = b.seventy.filter((s: string) => s !== slug);
     if (Array.isArray(b.thirty)) b.thirty = b.thirty.filter((s: string) => s !== slug);
   }
+}
+
+/**
+ * Remove a field slug from the layout entirely, without touching the field itself.
+ * Unlike moveFieldInLayout this does not re-insert the slug, and it deliberately does NOT
+ * require the field to exist in `structure` — its purpose is clearing ORPHANED entries left
+ * behind when a field was deleted while still placed in the layout.
+ */
+export function removeFieldFromLayout(layout: AnyObj, slug: string, tabId?: string): { layout: AnyObj; found: boolean } {
+  const next = clone(layout);
+  let found = false;
+  for (const container of resolveContainers(next, tabId)) {
+    if (layoutSlugsOf(container).includes(slug)) found = true;
+    removeFieldFromContainer(container, slug);
+  }
+  return { layout: next, found };
+}
+
+/** Every field slug placed anywhere in one container (rows, flat rows, seventy/thirty). */
+function layoutSlugsOf(container: AnyObj): string[] {
+  const out: string[] = [];
+  for (const key of Object.keys(container)) {
+    const b = container[key];
+    if (!b || typeof b !== 'object' || Array.isArray(b)) continue;
+    if (Array.isArray(b.rows)) {
+      for (const r of b.rows) {
+        if (Array.isArray(r)) out.push(...r.filter((x): x is string => typeof x === 'string' && x !== ''));
+        else if (typeof r === 'string' && r) out.push(r);
+      }
+    }
+    if (Array.isArray(b.seventy)) out.push(...b.seventy);
+    if (Array.isArray(b.thirty)) out.push(...b.thirty);
+  }
+  return out;
+}
+
+/**
+ * Slugs placed in the layout that no longer exist as fields — the residue of a field deleted
+ * while still laid out. They render as nothing but keep occupying a row.
+ */
+export function orphanedLayoutSlugs(layout: AnyObj, fieldSlugs: string[]): string[] {
+  const known = new Set(fieldSlugs);
+  const seen = new Set<string>();
+  const containers: AnyObj[] = [layout];
+  const tabs = layout?.tabs?.tabs;
+  if (Array.isArray(tabs)) for (const t of tabs) if (t.layout && typeof t.layout === 'object') containers.push(t.layout);
+  for (const c of containers) {
+    for (const slug of layoutSlugsOf(c)) {
+      if (!known.has(slug) && !slug.startsWith('section__')) seen.add(slug);
+    }
+  }
+  return [...seen].sort();
 }
 
 /**
@@ -701,6 +754,7 @@ export async function handleMoveLayoutField(args: Record<string, unknown>, ctx: 
   const afterField = args['afterField'] as string | undefined;
   const tabId = args['tabId'] as string | undefined;
   const toTab = args['toTab'] as string | undefined;
+  const fullWidth = args['fullWidth'] as boolean | undefined;
   const confirm = args['confirm'] === true;
   if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
   if (!slug) return err('SMARTSUITE_VALIDATION_ERROR', 'slug is required (the field to move).');
@@ -709,7 +763,46 @@ export async function handleMoveLayoutField(args: Record<string, unknown>, ctx: 
     const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
     const layout = app.structure_layout as AnyObj | undefined;
     if (!layout) return err('SMARTSUITE_VALIDATION_ERROR', 'This application has no structure_layout to edit.');
-    if (!(app.structure ?? []).some((f) => f.slug === slug)) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" not found in application ${applicationId}.`);
+    const target_ = (app.structure ?? []).find((f) => f.slug === slug);
+    if (!target_) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" not found in application ${applicationId}.`);
+
+    // Column span lives on the FIELD (params.width: 1 = half, 2 = full), not in structure_layout —
+    // a row like ["slug", ""] is a half-width field with an empty right slot. Setting it is a
+    // change_field write, so it is applied separately from any row reordering.
+    let widthChange: { from: number | null; to: number } | null = null;
+    if (fullWidth !== undefined) {
+      const from = (target_.params.width as number | undefined) ?? null;
+      const to = fullWidth ? 2 : 1;
+      if (from !== to) widthChange = { from, to };
+    }
+    const applyWidth = async () => {
+      if (!widthChange) return;
+      const next = JSON.parse(JSON.stringify(target_)) as FieldDefinition;
+      next.params = { ...next.params, width: widthChange.to };
+      await ctx.client.changeField(applicationId, next);
+    };
+
+    // With fullWidth alone and no destination, this is a width-only change: reordering a field
+    // the caller did not ask to move (a bare call appends it to the end) would be a surprise.
+    if (fullWidth !== undefined && afterField === undefined && toTab === undefined) {
+      if (!confirm) {
+        return ok({
+          dryRun: true,
+          slug,
+          wouldSetWidth: widthChange ? `${widthChange.from ?? 'unset'} -> ${widthChange.to}` : 'already set; no change',
+          note: 'Width-only change (no afterField/toTab given, so the field is not reordered). Re-call with confirm:true to apply.',
+        });
+      }
+      await applyWidth();
+      return ok({
+        slug,
+        fullWidth: fullWidth,
+        widthChanged: Boolean(widthChange),
+        note: widthChange
+          ? 'Submitted. change_field applies asynchronously; re-read the field in a moment to confirm.'
+          : 'Field already had that width; nothing was written.',
+      });
+    }
 
     // Cross-tab move: relocate the field to another tab's layout.
     if (toTab) {
@@ -719,9 +812,10 @@ export async function handleMoveLayoutField(args: Record<string, unknown>, ctx: 
       } catch (e) {
         return err('SMARTSUITE_VALIDATION_ERROR', (e as Error).message);
       }
-      if (!confirm) return ok({ dryRun: true, wouldMove: slug, toTab, toTabName: moved.toTabName, afterField: afterField ?? '(end)', order: rowsOrderOf(moved.layout, toTab), note: 'Re-call with confirm:true to apply.' });
+      if (!confirm) return ok({ dryRun: true, wouldMove: slug, toTab, toTabName: moved.toTabName, afterField: afterField ?? '(end)', ...widthPreview(widthChange), order: rowsOrderOf(moved.layout, toTab), note: 'Re-call with confirm:true to apply.' });
       const updated = await ctx.client.updateApplicationLayout(applicationId, moved.layout);
-      return ok({ moved: true, slug, toTab, toTabName: moved.toTabName, order: rowsOrderOf(updated.structure_layout as AnyObj, toTab) });
+      await applyWidth();
+      return ok({ moved: true, slug, toTab, toTabName: moved.toTabName, ...widthResult(widthChange), order: rowsOrderOf(updated.structure_layout as AnyObj, toTab) });
     }
 
     // Within-container reorder.
@@ -735,9 +829,86 @@ export async function handleMoveLayoutField(args: Record<string, unknown>, ctx: 
     }
     if (!result.found) return err('SMARTSUITE_NOT_FOUND', `Field "${slug}" is not placed in ${target(tabId)}. To pull it in from another tab, pass toTab.`);
 
-    if (!confirm) return ok({ dryRun: true, wouldMove: slug, afterField: afterField ?? '(end)', target: target(tabId), order: rowsOrderOf(result.layout, tabId === 'all' || tabId === 'top' ? undefined : tabId), note: 'Re-call with confirm:true to apply.' });
+    if (!confirm) return ok({ dryRun: true, wouldMove: slug, afterField: afterField ?? '(end)', target: target(tabId), ...widthPreview(widthChange), order: rowsOrderOf(result.layout, tabId === 'all' || tabId === 'top' ? undefined : tabId), note: 'Re-call with confirm:true to apply.' });
     const updated = await ctx.client.updateApplicationLayout(applicationId, result.layout);
-    return ok({ moved: true, slug, target: target(tabId), order: rowsOrderOf(updated.structure_layout as AnyObj, tabId === 'all' || tabId === 'top' ? undefined : tabId) });
+    await applyWidth();
+    return ok({ moved: true, slug, target: target(tabId), ...widthResult(widthChange), order: rowsOrderOf(updated.structure_layout as AnyObj, tabId === 'all' || tabId === 'top' ? undefined : tabId) });
+  } catch (e) {
+    return errResult(e);
+  }
+}
+
+const widthPreview = (c: { from: number | null; to: number } | null) =>
+  c ? { wouldSetWidth: `${c.from ?? 'unset'} -> ${c.to}` } : {};
+const widthResult = (c: { from: number | null; to: number } | null) =>
+  c ? { widthChanged: true, width: c.to } : {};
+
+/**
+ * Remove a field's placement from the record-view layout without touching the field itself.
+ * Its main use is clearing ORPHANED entries — slugs still laid out after the underlying field
+ * was deleted — which no other tool can reach: delete_field 404s (the field is already gone)
+ * and move_layout_field refuses a slug that is not in `structure`.
+ */
+export async function handleRemoveLayoutField(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const blocked = schemaWriteGuard(ctx);
+  if (blocked) return blocked;
+
+  const applicationId = args['applicationId'] as string;
+  const slug = args['slug'] as string | undefined;
+  const tabId = args['tabId'] as string | undefined;
+  const removeOrphans = args['removeOrphans'] === true;
+  const confirm = args['confirm'] === true;
+  if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
+  if (!slug && !removeOrphans) {
+    return err('SMARTSUITE_VALIDATION_ERROR', 'Provide slug (the placement to remove) or removeOrphans:true to clear every layout entry whose field no longer exists.');
+  }
+
+  try {
+    const app = await ctx.client.getApplication(applicationId, { forceRefresh: true });
+    const layout = app.structure_layout as AnyObj | undefined;
+    if (!layout) return err('SMARTSUITE_VALIDATION_ERROR', 'This application has no structure_layout to edit.');
+    const fieldSlugs = (app.structure ?? []).map((f) => f.slug);
+    const orphans = orphanedLayoutSlugs(layout, fieldSlugs);
+
+    const targets = removeOrphans ? orphans : [slug as string];
+    if (removeOrphans && !targets.length) {
+      return ok({ removed: false, orphans: [], note: 'No orphaned layout entries found; nothing to remove.' });
+    }
+
+    // A slug that still has a field is a live placement: removing it hides the field from the
+    // record view. Allowed, but called out so it is never a silent side effect.
+    const live = targets.filter((t) => fieldSlugs.includes(t));
+
+    let next = layout;
+    const missing: string[] = [];
+    for (const t of targets) {
+      const r = removeFieldFromLayout(next, t, tabId);
+      if (!r.found) missing.push(t);
+      next = r.layout;
+    }
+    if (missing.length === targets.length) {
+      return err('SMARTSUITE_NOT_FOUND', `Not placed in ${target(tabId)}: ${missing.join(', ')}.`);
+    }
+
+    const removed = targets.filter((t) => !missing.includes(t));
+    if (!confirm) {
+      return ok({
+        dryRun: true,
+        wouldRemove: removed,
+        target: target(tabId),
+        ...(live.length ? { warning: `${live.join(', ')} still exist${live.length === 1 ? 's' : ''} as field(s) — removing the placement hides ${live.length === 1 ? 'it' : 'them'} from the record view. The field and its data are untouched.` } : {}),
+        ...(removeOrphans ? {} : { orphansFound: orphans }),
+        note: 'Re-call with confirm:true to apply.',
+      });
+    }
+    const updated = await ctx.client.updateApplicationLayout(applicationId, next);
+    return ok({
+      removed: true,
+      slugs: removed,
+      target: target(tabId),
+      ...(missing.length ? { notPlaced: missing } : {}),
+      remainingOrphans: orphanedLayoutSlugs(updated.structure_layout as AnyObj, fieldSlugs),
+    });
   } catch (e) {
     return errResult(e);
   }

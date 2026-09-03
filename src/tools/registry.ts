@@ -77,7 +77,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_application',
-    description: 'Create a new table (application) in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply a name and the solutionId. The table is created with a default "Title" primary field and a record term ("what each record is called", default "Record") — the record term is always set explicitly so it is never left empty (an empty record term can break list-view/grid widget creation against the table). PASS `fields` TO CREATE THE TABLE AND ALL ITS FIELDS IN ONE REQUEST: an array of { fieldType, label, params? } entries (same shape as smartsuite_create_field). This is the ONLY true bulk field path SmartSuite offers and it is dramatically faster than adding fields afterwards — one request for all of them, versus ~1s per field via smartsuite_create_fields against an existing table. So when a table is new, always create its fields here. SmartSuite also adds its own default field set (Title, Description, Assigned To, Status, Due Date, Priority, …) alongside yours. Dry-run preview unless confirm:true.',
+    description: 'Create a new table (application) in a solution. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. Supply a name and the solutionId. The table is created with a default "Title" primary field and a record term ("what each record is called", default "Record") — the record term is always set explicitly so it is never left empty (an empty record term can break list-view/grid widget creation against the table). PASS `fields` TO CREATE THE TABLE AND ALL ITS FIELDS IN ONE REQUEST: an array of { fieldType, label, params? } entries (same shape as smartsuite_create_field — params ARE honoured here, and the params that carry a field\'s configuration are validated: a linkedrecordfield without linked_application, or a rollup/lookup without linked_field + field_selection, is rejected rather than created half-built, and select choices get their stored `value` filled in from the label when omitted). This is the ONLY true bulk field path SmartSuite offers and it is dramatically faster than adding fields afterwards — one request for all of them, versus ~1s per field via smartsuite_create_fields against an existing table. So when a table is new, always create its fields here. SmartSuite also adds its own default field set (Title, Description, Assigned To, Status, Due Date, Priority, …) alongside yours. Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -181,7 +181,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_validate_formula',
-    description: 'Validate a SmartSuite formula expression against an application WITHOUT writing anything (safe in any mode). Returns {valid, safe, warnings} when valid, or a descriptive error message when not (syntax errors, unknown functions, missing field references). Field references use [slug] and chain across linked/compound fields as [slug].[slug]. Use this to check a formula before creating or updating a field.',
+    description: 'Validate a SmartSuite formula expression against an application WITHOUT writing anything (safe in any mode). Returns {valid, safe, warnings} when valid, or a descriptive error message when not (syntax errors, unknown functions, missing field references). Field references use [slug] and chain across linked/compound fields as [slug].[slug]. Use this to check a formula before creating or updating a field. Also runs a local lint pass for the traps SmartSuite accepts as valid (reversed DATEDIFF, FIND(...)>0, percent fields divided by 100, 1-based MID, unwrapped array functions, LOG/CEILING argument confusion) and returns them as advisory `lint` warnings.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -195,7 +195,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_formula_field',
-    description: 'Create a new formula field in a SmartSuite application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. The expression is validated first — an invalid formula is never created. Without confirm:true returns a dry-run preview (validation result + what would be created); set confirm:true to create. The field slug is generated automatically and the field is appended to the end of the table (SmartSuite ignores field positioning on create — use smartsuite_move_layout_field to rearrange).',
+    description: 'Create a new formula field in a SmartSuite application. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. The expression is validated first — an invalid formula is never created — and a local lint pass reports the semantic traps SmartSuite\'s validator accepts (see smartsuite_validate_formula); those warnings are advisory and never block. Without confirm:true returns a dry-run preview (validation result + what would be created); set confirm:true to create. The field slug is generated automatically and the field is appended to the end of the table (SmartSuite ignores field positioning on create — use smartsuite_move_layout_field to rearrange).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -211,7 +211,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_update_formula_field',
-    description: 'Update an existing formula field\'s expression, label, and/or return type. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. The current definition is fetched and only the supplied fields are changed (other params preserved). The new expression is validated first. Without confirm:true returns a dry-run preview (new vs previous); set confirm:true to apply.',
+    description: 'Update an existing formula field\'s expression, label, and/or return type. Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. The current definition is fetched and only the supplied fields are changed (other params preserved). The new expression is validated first, and linted for the semantic traps SmartSuite accepts as valid (advisory only). Without confirm:true returns a dry-run preview (new vs previous); set confirm:true to apply.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -244,7 +244,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_create_field',
-    description: 'Create a field of any type in an application (including rollup and lookup fields — not just formulas). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply fieldType + label and an OPTIONAL sparse params object; SmartSuite fills type defaults, so most fields need no params. Provide params only where they matter, e.g.: singleselectfield/multipleselectfield/statusfield → {choices:[{label, value_help_text?, weight?}]} where value_help_text is the option DESCRIPTION shown in the dropdown and weight is its NUMERIC value (used by formulas/rollups); e.g. {choices:[{label:"High", value_help_text:"Ship this week", weight:3}]}. Choice colors and order are auto-assigned if omitted so the dropdown renders correctly (status choices take no weight/description); linkedrecordfield → {linked_application:"<app id>", entries_allowed:"single"|"multiple"} (backlink auto-created); rollupfield → {linked_field:"<linkedrecord field slug in THIS table>", field_selection:"<field slug in the LINKED table>", function:"sum"|"count"|"min"|"max"|"average"|"concatenate"|...}; lookupfield → {linked_field, field_selection}; numberfield → {precision, separator}; currencyfield → {currency:"USD"}; textfield → {max_length}. (For formula fields use smartsuite_create_formula_field.) AI FIELDS: to make a field AI-populated, pass `aiPrompt` — a plain-text prompt where `{{field_slug}}` inserts a live reference to another field (e.g. "Summarize {{title}} for {{s096c9e74e}}"). The tool builds the correct rich-text instructions with field-reference pills and enables the AI agent; put the AI model/credential and other ai_agent settings in params.ai_agent if needed. (This is the reliable way to set dynamic AI prompts — do NOT hand-build ai_agent.instructions.) The slug is generated and the field is placed in the record-view layout. Dry-run preview unless confirm:true.',
+    description: 'Create a field of any type in an application (including rollup and lookup fields — not just formulas). Requires readwrite/admin mode AND SMARTSUITE_ENABLE_SCHEMA_WRITE=true. You supply fieldType + label and an OPTIONAL sparse params object; SmartSuite fills type defaults, so most fields need no params. Provide params only where they matter, e.g.: singleselectfield/multipleselectfield/statusfield → {choices:[{label, value?, value_help_text?, weight?}]} where `value` is the stored option key (omit it and one is derived from the label, e.g. "Ready for Review" → "ready_for_review"; SmartSuite itself silently stores NO options for a choice that reaches it without a value) where value_help_text is the option DESCRIPTION shown in the dropdown and weight is its NUMERIC value (used by formulas/rollups); e.g. {choices:[{label:"High", value_help_text:"Ship this week", weight:3}]}. Choice colors and order are auto-assigned if omitted so the dropdown renders correctly (status choices take no weight/description); linkedrecordfield → {linked_application:"<id of the table it links TO>", entries_allowed:"single"|"multiple"} (REQUIRED — without it SmartSuite creates the field with a null target and an error badge, and still reports success; camelCase `linkedApplication`, as returned by describe_application, is accepted and converted; backlink auto-created); rollupfield → {linked_field:"<linkedrecord field slug in THIS table>", field_selection:"<NUMERIC field slug in the LINKED table>", function: exactly one of "sum"|"min"|"max"|"average"|"range" — there are no others. These are the only tokens that compute: SmartSuite accepts ANY string here without error and the field then returns null on every record, so a guessed token yields a field that looks valid and is silently empty. There is no "count" rollup (use a countfield to count linked records) and no "concatenate" (use a formula field with ARRAYJOIN([link].[field], "; ")). field_selection must point at a numeric field — a non-numeric target leaves the rollup invalid; lookupfield → {linked_field, field_selection}; numberfield → {precision, separator}; currencyfield → {currency:"USD"}; textfield → {max_length}. (For formula fields use smartsuite_create_formula_field.) AI FIELDS: to make a field AI-populated, pass `aiPrompt` — a plain-text prompt where `{{field_slug}}` inserts a live reference to another field (e.g. "Summarize {{title}} for {{s096c9e74e}}"). The tool builds the correct rich-text instructions with field-reference pills and enables the AI agent; put the AI model/credential and other ai_agent settings in params.ai_agent if needed. (This is the reliable way to set dynamic AI prompts — do NOT hand-build ai_agent.instructions.) The slug is generated and the field is placed in the record-view layout. Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1338,7 +1338,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'smartsuite_move_layout_field',
-    description: 'Move/arrange a field in the record-view layout — reorder it, place it under a section, or move it to a different tab. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. To move a field to ANOTHER tab, pass toTab = the destination tab id: the field is removed from its current tab and added to the destination (this is the cross-tab move — plain reorder can\'t pull a field in from another tab). Otherwise it reorders within the current layout. Pass afterField = a field slug OR a section__ slug to position this field right after it (right after a section marker = first field under that section); omit afterField for the end. In two-column layouts the field is placed as its own full-width row. When tabs are enabled and toTab is NOT used, tabId is required (a tab id, "all", or "top"). Dry-run preview unless confirm:true.',
+    description: 'Move/arrange a field in the record-view layout — reorder it, place it under a section, or move it to a different tab. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. To move a field to ANOTHER tab, pass toTab = the destination tab id: the field is removed from its current tab and added to the destination (this is the cross-tab move — plain reorder can\'t pull a field in from another tab). Otherwise it reorders within the current layout. Pass afterField = a field slug OR a section__ slug to position this field right after it (right after a section marker = first field under that section); omit afterField for the end. In two-column layouts the field is placed alone in its row — which is NOT the same as full width: the column span lives on the field as params.width (1 = half, so the row renders with an empty right slot; 2 = spans both columns). Pass fullWidth:true/false to set it; that is a change_field write, so with fullWidth and no afterField/toTab this only changes the span and does not reorder anything. When tabs are enabled and toTab is NOT used, tabId is required (a tab id, "all", or "top") — with tabs on, the record view renders per-tab layouts, so a top-level edit is saved but invisible. Dry-run preview unless confirm:true.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1346,10 +1346,27 @@ export const TOOL_DEFINITIONS = [
         slug: { type: 'string', description: 'The field slug to move.' },
         toTab: { type: 'string', description: 'Destination tab id — moves the field to that tab (removing it from its current tab). Use this for cross-tab moves.' },
         afterField: { type: 'string', description: 'Field slug or section__ slug to place this field after (default: end).' },
+        fullWidth: { type: 'boolean', description: 'Set the field\'s record-view column span: true = spans both columns (params.width 2), false = half width (1). Omit to leave the span alone. Given without afterField/toTab, only the span changes — the field is not reordered.' },
         tabId: { type: 'string', description: 'For within-layout reorder when tabs are enabled (required then): a tab id, "all", or "top". Ignored when toTab is set. Omit when tabs are disabled.' },
         confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
       },
       required: ['applicationId', 'slug'],
+    },
+    annotations: { readOnlyHint: false },
+  },
+  {
+    name: 'smartsuite_remove_layout_field',
+    description: 'Remove a field\'s PLACEMENT from the record-view layout without deleting the field. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE. Its main use is clearing ORPHANED layout entries — slugs still laid out after the underlying field was deleted, which nothing else can reach (delete_field 404s because the field is already gone, and move_layout_field refuses a slug that is not in the schema). Pass removeOrphans:true to clear every orphaned entry at once, or slug to remove one specific placement; a dry run lists any orphans it finds either way. Removing the placement of a field that still exists hides it from the record view (the field and its data are untouched) and is called out in the preview. Dry-run preview unless confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        applicationId: { type: 'string', description: 'The application (table) ID.' },
+        slug: { type: 'string', description: 'The field slug whose placement to remove. Omit when using removeOrphans.' },
+        removeOrphans: { type: 'boolean', description: 'Remove every layout entry whose field no longer exists.' },
+        tabId: { type: 'string', description: 'Which layout to edit when tabs are enabled: a tab id, "all" (top-level + every tab), or "top". Orphans usually need "all".' },
+        confirm: { type: 'boolean', description: 'Must be true to apply (default false = preview).' },
+      },
+      required: ['applicationId'],
     },
     annotations: { readOnlyHint: false },
   },

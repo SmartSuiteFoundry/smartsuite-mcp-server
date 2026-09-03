@@ -225,6 +225,153 @@ const CHOICE_PALETTE = [
  *    matching the UI. Callers set it per choice to give options distinct numeric values.
  * Any explicitly-provided value is preserved.
  */
+/**
+ * camelCase spellings accepted as aliases for the snake_case params SmartSuite actually stores.
+ *
+ * This exists because the READ and WRITE sides of the MCP disagree: describe_application/list_fields
+ * emit `linkedApplication` (camelCase), while add_field/change_field require `linked_application`.
+ * Round-tripping a field you just read therefore produced a linked-record field with a NULL target —
+ * SmartSuite ignores the unknown key, creates the field, and reports success. Accepting both
+ * spellings closes that trap instead of leaving it to the caller to notice.
+ */
+const PARAM_ALIASES: Record<string, string> = {
+  linkedApplication: 'linked_application',
+  entriesAllowed: 'entries_allowed',
+  linkedField: 'linked_field',
+  fieldSelection: 'field_selection',
+  linkedFieldSlug: 'linked_field_slug',
+  maxLength: 'max_length',
+  displayFormat: 'display_format',
+  valueHelpText: 'value_help_text',
+};
+
+/** SmartSuite derives a choice `value` from its label this way: "Ready for Review" -> "ready_for_review". */
+export function choiceValueFromLabel(label: string): string {
+  return String(label).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'option';
+}
+
+/** Rewrite camelCase param keys to the snake_case SmartSuite expects, at the top level and per choice. */
+function applyParamAliases(params: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(params)) out[PARAM_ALIASES[k] ?? k] = v;
+  if (Array.isArray(out['choices'])) {
+    out['choices'] = (out['choices'] as unknown[]).map((c) =>
+      c && typeof c === 'object' && !Array.isArray(c)
+        ? Object.fromEntries(Object.entries(c as Record<string, unknown>).map(([k, v]) => [PARAM_ALIASES[k] ?? k, v]))
+        : c,
+    );
+  }
+  return out;
+}
+
+/**
+ * Fill in the choice `value` SmartSuite requires but the tool never documented.
+ *
+ * A choice sent as `{label:"High"}` is not an error: SmartSuite accepts the field and stores
+ * `choices: []`, so a select field arrives with no options and the call still reports success.
+ * Values are derived from labels the way the UI does, and de-duplicated so two labels that
+ * normalize alike ("In Progress" / "in-progress") do not collide into one option.
+ */
+function fillChoiceValues(fieldType: string, params: Record<string, unknown>): Record<string, unknown> {
+  if (!SELECT_FIELD_TYPES.has(fieldType) || !Array.isArray(params['choices'])) return params;
+  const seen = new Set<string>();
+  const choices = (params['choices'] as Array<Record<string, unknown>>).map((c) => {
+    if (!c || typeof c !== 'object') return c;
+    const existing = c['value'];
+    if (typeof existing === 'string' && existing.trim()) { seen.add(existing); return c; }
+    let v = choiceValueFromLabel(String(c['label'] ?? ''));
+    if (seen.has(v)) { let n = 2; while (seen.has(`${v}_${n}`)) n++; v = `${v}_${n}`; }
+    seen.add(v);
+    return { ...c, value: v };
+  });
+  return { ...params, choices };
+}
+
+/**
+ * Params that, if missing, guarantee a broken field. SmartSuite creates the field anyway and
+ * reports success, so these are caught here rather than discovered as an error badge later.
+ */
+function requiredParamError(fieldType: string, params: Record<string, unknown>): string | null {
+  if (fieldType === 'linkedrecordfield') {
+    const target = params['linked_application'];
+    if (typeof target !== 'string' || !target.trim()) {
+      return 'linkedrecordfield requires params.linked_application (the id of the table it links TO). '
+        + 'Without it SmartSuite creates the field with a null target and it shows an error badge in the UI. '
+        + '(camelCase linkedApplication — as returned by describe_application — is accepted and converted.)';
+    }
+  }
+  if (fieldType === 'lookupfield' || fieldType === 'rollupfield') {
+    for (const key of ['linked_field', 'field_selection']) {
+      if (params[key] === undefined) {
+        return `${fieldType} requires params.${key}. Without it the field is created but resolves to nothing.`;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Normalize and validate a field's params before any write: camelCase aliases are converted,
+ * select choices get the `value` SmartSuite silently requires, and params whose absence would
+ * guarantee a broken field are rejected. Returns the params to send, or an error message.
+ */
+export function prepareFieldParams(
+  fieldType: string,
+  rawParams: Record<string, unknown>,
+): { params: Record<string, unknown> } | { error: string } {
+  const aliased = applyParamAliases(rawParams);
+  const withValues = fillChoiceValues(fieldType, aliased);
+  const rollupError = validateRollupParams(fieldType, withValues);
+  if (rollupError) return { error: rollupError };
+  const missing = requiredParamError(fieldType, withValues);
+  if (missing) return { error: missing };
+  return { params: normalizeChoices(fieldType, withValues) };
+}
+
+/**
+ * Rollup aggregate functions that actually compute a value.
+ *
+ * SmartSuite's API does NOT validate this token: any string is accepted with HTTP 200, stored
+ * verbatim, and the field reports `valid: true` with a computed target_field_structure — it just
+ * returns null on every record. (`valid` tracks the target FIELD, not the function: a nonsense
+ * function over a numeric target reads back valid, while `sum` over a non-numeric one does not.)
+ * A wrong token is therefore invisible until someone opens a record, so we reject it here.
+ *
+ * Verified by controlled experiment (two linked records with values 10 and 4, one numeric target,
+ * only the function string varied): sum→14, min→4, max→10, average→7.00, range→6 all computed;
+ * count, concatenate, median, count_distinct, stdev, earliest, latest, percent_filled, first,
+ * last and a deliberately bogus token all returned null.
+ */
+export const ROLLUP_FUNCTIONS = ['sum', 'min', 'max', 'average', 'range'] as const;
+
+/** Tokens seen in the wild or previously advertised that do not compute — worth a pointed message. */
+const ROLLUP_NON_FUNCTIONS: Record<string, string> = {
+  count: 'Rollups have no "count" aggregate — use a countfield to count linked records, or sum a numeric field.',
+  concatenate: 'A "concatenate" rollup returns nothing over a numeric target. To join values across a link, use a formula field with ARRAYJOIN([link].[field], "; ").',
+  count_distinct: 'Not a rollup aggregate. COUNT_DISTINCT exists in formula fields.',
+  median: 'Not a rollup aggregate. MEDIAN exists in formula fields.',
+  stdev: 'Not a rollup aggregate. STDEV exists in formula fields.',
+  earliest: 'Not a rollup aggregate. Use min over a date field, or RELATED_RECORD_SORT in a formula.',
+  latest: 'Not a rollup aggregate. Use max over a date field, or RELATED_RECORD_SORT in a formula.',
+};
+
+/**
+ * Reject a rollup whose `function` would silently compute nothing. Returns an error message,
+ * or null when the params are fine (or the field is not a rollup).
+ */
+export function validateRollupParams(fieldType: string, params: Record<string, unknown>): string | null {
+  if (fieldType !== 'rollupfield') return null;
+  const fn = params['function'];
+  if (fn === undefined) return null; // sparse params are allowed; SmartSuite fills its own default
+  if (typeof fn !== 'string' || !ROLLUP_FUNCTIONS.includes(fn as (typeof ROLLUP_FUNCTIONS)[number])) {
+    const hint = typeof fn === 'string' ? ROLLUP_NON_FUNCTIONS[fn.toLowerCase()] : undefined;
+    return `Rollup function ${JSON.stringify(fn)} does not compute a value. Supported: ${ROLLUP_FUNCTIONS.join(', ')}.`
+      + (hint ? ` ${hint}` : '')
+      + ' SmartSuite accepts any token here without error and the field then returns null on every record, so this is blocked before the write.';
+  }
+  return null;
+}
+
 export function normalizeChoices(fieldType: string, params: Record<string, unknown>): Record<string, unknown> {
   if (!SELECT_FIELD_TYPES.has(fieldType) || !Array.isArray(params?.['choices'])) return params;
   const weighted = WEIGHTED_SELECT_TYPES.has(fieldType);
@@ -237,6 +384,11 @@ export function normalizeChoices(fieldType: string, params: Record<string, unkno
       : {}),
   }));
   return { ...params, choices };
+}
+
+/** Alias/choice-value pass with no required-param check — for a sparse patch merged onto an existing field. */
+function applyPatchAliasesOnly(params: Record<string, unknown>): Record<string, unknown> {
+  return applyParamAliases(params);
 }
 
 /** Shallow-merge a params patch onto existing params (patch keys win; others preserved). */
@@ -290,14 +442,18 @@ export function parseFieldSpecs(raw: unknown, max = MAX_BULK_FIELDS): { specs: F
     const params = rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
       ? { ...(rawParams as Record<string, unknown>) }
       : {};
+    const prepared = prepareFieldParams(fieldType, params);
+    if ('error' in prepared) return { error: `fields[${i}] (${label}): ${prepared.error}` };
     const aiPrompt = typeof rec['aiPrompt'] === 'string' && rec['aiPrompt'].trim() ? rec['aiPrompt'] : undefined;
-    specs.push({ slug: generateFieldSlug(), label, fieldType, params, aiPrompt });
+    specs.push({ slug: generateFieldSlug(), label, fieldType, params: prepared.params, aiPrompt });
   }
   return { specs };
 }
 
 /** Turn a spec into the field definition sent to SmartSuite (choice normalization included). */
 export function fieldDefOf(spec: FieldSpec): FieldDefinition {
+  // parseFieldSpecs already prepared these params; normalizeChoices is idempotent, so callers
+  // that build a spec by hand still get correctly-shaped choices.
   return buildFieldDef(spec.slug, spec.label, spec.fieldType, normalizeChoices(spec.fieldType, spec.params));
 }
 
@@ -426,6 +582,9 @@ export async function handleCreateField(args: Record<string, unknown>, ctx: Tool
   if (!applicationId) return err('SMARTSUITE_VALIDATION_ERROR', 'applicationId is required.');
   if (!fieldType?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'fieldType is required (e.g. textfield, numberfield, singleselectfield, linkedrecordfield).');
   if (!label?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'label is required.');
+  const prepared = prepareFieldParams(fieldType, params);
+  if ('error' in prepared) return err('SMARTSUITE_VALIDATION_ERROR', prepared.error);
+  params = prepared.params;
 
   try {
     // Build the AI prompt (ai_agent.instructions) from a {{slug}} template, resolving field references
@@ -438,7 +597,7 @@ export async function handleCreateField(args: Record<string, unknown>, ctx: Tool
     }
 
     const slug = generateFieldSlug();
-    const field = buildFieldDef(slug, label, fieldType, normalizeChoices(fieldType, params));
+    const field = buildFieldDef(slug, label, fieldType, params);
     if (!confirm) {
       return ok({ dryRun: true, would: { slug, fieldType, label, paramKeys: Object.keys(params).sort(), position: '(appended to the end)' }, note: 'SmartSuite fills type defaults for omitted params. Re-call with confirm:true to create.' });
     }
@@ -478,7 +637,19 @@ export async function handleUpdateField(args: Record<string, unknown>, ctx: Tool
 
     const next = JSON.parse(JSON.stringify(field)) as Record<string, any>;
     if (typeof label === 'string') next['label'] = label;
-    if (params) next['params'] = normalizeChoices(next['field_type'], mergeFieldParams(next['params'] ?? {}, params));
+    if (params) {
+      // Prepare the PATCH first (aliases + choice values), then merge, then validate the result:
+      // a sparse patch can introduce a bad value on its own, and required params may already be
+      // satisfied by the existing field.
+      const patch = prepareFieldParams(next['field_type'], params);
+      if ('error' in patch && !/requires params\./.test(patch.error)) {
+        return err('SMARTSUITE_VALIDATION_ERROR', patch.error);
+      }
+      const merged = mergeFieldParams(next['params'] ?? {}, 'params' in patch ? patch.params : applyPatchAliasesOnly(params));
+      const validated = prepareFieldParams(next['field_type'], merged);
+      if ('error' in validated) return err('SMARTSUITE_VALIDATION_ERROR', validated.error);
+      next['params'] = validated.params;
+    }
     // Rebuild the AI prompt from a template, preserving the field's existing ai_agent (model, enabled).
     if (typeof aiPrompt === 'string' && aiPrompt.trim()) {
       const applied = applyAiPrompt(next['params'] ?? {}, aiPrompt, app.structure ?? []);

@@ -83,6 +83,7 @@ import {
   handleUpdateLayoutTab,
   handleRemoveLayoutTab,
   handleMoveLayoutField,
+  handleRemoveLayoutField,
   handleSetFieldVisibility,
   handleSetDisplayLogic,
 } from './tools/layout.js';
@@ -169,6 +170,7 @@ const HANDLERS: Record<string, ToolHandler> = {
   smartsuite_update_layout_tab:     handleUpdateLayoutTab,
   smartsuite_remove_layout_tab:     handleRemoveLayoutTab,
   smartsuite_move_layout_field:     handleMoveLayoutField,
+  smartsuite_remove_layout_field:  handleRemoveLayoutField,
   smartsuite_set_field_visibility:  handleSetFieldVisibility,
   smartsuite_set_display_logic:     handleSetDisplayLogic,
   smartsuite_match_solutions:       handleMatchSolutions,

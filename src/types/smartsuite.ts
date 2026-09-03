@@ -106,6 +106,8 @@ export interface FieldParams {
   required?: boolean;
   unique?: boolean;
   hidden?: boolean;
+  /** Record-view column span: 1 = half width, 2 = spans both columns. Absent/0 on system fields. */
+  width?: number;
   choices?: FieldChoice[];
   linked_application?: string;
   linked_field_slug?: string;
