@@ -262,9 +262,11 @@ export async function handleCreateApplication(args: Record<string, unknown>, ctx
 
   const name = args['name'] as string;
   const solutionId = args['solutionId'] as string;
-  // "What should each record be called?" — default to "Record" so it is never left empty.
+  // "What should each record be called?" — never left empty, and lower-case to match SmartSuite's
+  // own convention: every UI-created table stores a lower-case term ("record", "ticket", "story",
+  // "company"), and the UI capitalizes it for display. Storing "Record" rendered as a mismatch.
   const rt = args['recordTerm'];
-  const recordTerm = typeof rt === 'string' && rt.trim() ? rt.trim() : 'Record';
+  const recordTerm = typeof rt === 'string' && rt.trim() ? rt.trim() : 'record';
   const confirm = args['confirm'] === true;
   if (!name?.trim()) return err('SMARTSUITE_VALIDATION_ERROR', 'name is required.');
   if (!solutionId) return err('SMARTSUITE_VALIDATION_ERROR', 'solutionId is required.');
@@ -302,6 +304,21 @@ export async function handleCreateApplication(args: Record<string, unknown>, ctx
       record_term: recordTerm,
       ...(specs.length ? { structure: specs.map(fieldDefOf) } : {}),
     });
+
+    // The record term drives the record-view "Add <term>" button and grid/list widgets; an empty
+    // one leaves the table visibly broken. We send it explicitly, but it has been observed coming
+    // back empty anyway, so read it back and repair rather than trusting the create response.
+    let recordTermRepaired = false;
+    let effectiveTerm = (app as { record_term?: string }).record_term ?? '';
+    if (!effectiveTerm.trim()) {
+      try {
+        const patched = await ctx.client.updateApplication(app.id, { record_term: recordTerm });
+        effectiveTerm = (patched as { record_term?: string }).record_term ?? recordTerm;
+        recordTermRepaired = true;
+      } catch {
+        effectiveTerm = '';
+      }
+    }
     const structure = app.structure ?? [];
     const primary = structure.find((f) => (f.params as { primary?: boolean } | undefined)?.primary) ?? structure[0];
     const present = new Set(structure.map((f) => f.slug));
@@ -312,7 +329,9 @@ export async function handleCreateApplication(args: Record<string, unknown>, ctx
         name: app.name,
         slug: (app as { slug?: string }).slug ?? null,
         solutionId,
-        recordTerm: (app as { record_term?: string }).record_term ?? recordTerm,
+        recordTerm: effectiveTerm || recordTerm,
+        ...(recordTermRepaired ? { recordTermRepaired: true } : {}),
+        ...(effectiveTerm.trim() ? {} : { recordTermWarning: 'SmartSuite returned an empty record term and the repair attempt failed. The record-view "Add <term>" button and grid/list widgets will render wrong until it is set — retry with smartsuite_update_application({ recordTerm: "record" }).' }),
         primaryField: primary ? { slug: primary.slug, label: primary.label } : null,
       },
       ...(specs.length

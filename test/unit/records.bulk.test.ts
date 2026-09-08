@@ -13,6 +13,16 @@ const mkClient = (response: unknown) => {
   return client;
 };
 
+// The endpoint omits unchanged records, so a missing id is probed: it exists => no-op success.
+const withGet = (client: any, existingIds: string[] = []) => {
+  // Assign onto the instance — spreading a class instance drops its prototype methods.
+  client.getRecord = async (_a: string, id: string) => {
+    if (existingIds.includes(id)) return { id };
+    throw new Error('404');
+  };
+  return client;
+};
+
 const mkCtx = (client: any, over: any = {}) => ({
   config: {
     mode: 'readwrite',
@@ -52,7 +62,7 @@ describe('SmartSuiteClient.bulkUpdateRecords', () => {
 
 describe('handleUpdateRecords', () => {
   it('reports the updated count instead of throwing on a bare-array response', async () => {
-    const out = parse(await run([{ recordId: 'r1', fields: { title: 'One' } }], mkClient([{ id: 'r1', title: 'One' }])));
+    const out = parse(await run([{ recordId: 'r1', fields: { title: 'One' } }], withGet(mkClient([{ id: 'r1', title: 'One' }]), ['r1'])));
     expect(out.error).toBeUndefined();
     expect(out).toMatchObject({ dryRun: false, updated: 1, failed: 0, failures: [] });
   });
@@ -60,14 +70,34 @@ describe('handleUpdateRecords', () => {
   it('surfaces ids the endpoint silently dropped as failures', async () => {
     const out = parse(await run(
       [{ recordId: 'r1', fields: { title: 'One' } }, { recordId: 'ghost', fields: { title: 'X' } }],
-      mkClient([{ id: 'r1', title: 'One' }]),
+      withGet(mkClient([{ id: 'r1', title: 'One' }]), ['r1']),
     ));
     expect(out).toMatchObject({ updated: 1, failed: 1 });
     expect(out.failures[0]).toMatchObject({ index: 1, recordId: 'ghost' });
   });
 
+  // SmartSuite leaves a record out of the response when the submitted values already matched.
+  // Reporting that as a failure (as 1.0.1 did) makes an idempotent re-run look broken.
+  it('counts a record that was already up to date as unchanged, not failed', async () => {
+    const out = parse(await run(
+      [{ recordId: 'r1', fields: { title: 'One' } }, { recordId: 'r2', fields: { title: 'Same' } }],
+      withGet(mkClient([{ id: 'r1', title: 'One' }]), ['r1', 'r2']),
+    ));
+    expect(out).toMatchObject({ updated: 1, unchanged: 1, failed: 0 });
+    expect(out.unchangedRecords[0]).toMatchObject({ index: 1, recordId: 'r2' });
+    expect(out.failures).toEqual([]);
+  });
+
+  it('separates the two when a batch has both', async () => {
+    const out = parse(await run(
+      [{ recordId: 'r1', fields: {} }, { recordId: 'r2', fields: {} }, { recordId: 'ghost', fields: {} }],
+      withGet(mkClient([{ id: 'r1' }]), ['r1', 'r2']),
+    ));
+    expect(out).toMatchObject({ updated: 1, unchanged: 1, failed: 1 });
+  });
+
   it('merges endpoint-reported failures with the diffed ones', async () => {
-    const client = mkClient({ successful_items: [], failed_items: [{ index: 0, reason: 'validation' }] });
+    const client = withGet(mkClient({ successful_items: [], failed_items: [{ index: 0, reason: 'validation' }] }), []);
     const out = parse(await run([{ recordId: 'r1', fields: {} }], client));
     expect(out.failed).toBe(2);
     expect(out.failures.map((f: any) => f.reason)).toEqual(['validation', expect.stringContaining('not updated')]);
@@ -81,7 +111,7 @@ describe('handleUpdateRecords', () => {
 
   it('still gates on mode, batch cap, and confirm', async () => {
     const one = [{ recordId: 'r1', fields: { title: 'One' } }];
-    const client = mkClient([{ id: 'r1' }]);
+    const client = withGet(mkClient([{ id: 'r1' }]), ['r1']);
     expect(parse(await run(one, client, { config: { mode: 'readonly' } })).error.code).toBe('MCP_MODE_BLOCKED');
     expect(parse(await run(one, client, { config: { maxBatchWrites: 0 } })).error.code).toBe('LIMIT_EXCEEDED');
     const unconfirmed = await handleUpdateRecords({ applicationId: 'app1', records: one, dryRun: false }, mkCtx(client));

@@ -52,7 +52,38 @@ export async function handleCreateSolution(
 
   try {
     const solution = await ctx.client.createSolution(body);
-    return ok({ created: true, solution: { id: solution.id, name: solution.name, slug: (solution as { slug?: string }).slug ?? null } });
+
+    // SmartSuite seeds a new solution with a starter table that never goes through
+    // create_application, so it misses that tool's record-term handling entirely. Report it, and
+    // repair the term if the server left it empty — an empty term breaks the record-view
+    // "Add <term>" button and grid/list widgets on any table built from it.
+    const seeded: Array<Record<string, unknown>> = [];
+    try {
+      for (const a of await ctx.client.listApplications(solution.id)) {
+        const full = await ctx.client.getApplication(a.id, { forceRefresh: true });
+        let term = full.record_term ?? '';
+        let repaired = false;
+        if (!term.trim()) {
+          try {
+            const patched = await ctx.client.updateApplication(a.id, { record_term: 'record' });
+            term = (patched as { record_term?: string }).record_term ?? 'record';
+            repaired = true;
+          } catch { /* reported below as an empty term */ }
+        }
+        seeded.push({ id: a.id, name: full.name, recordTerm: term || null, ...(repaired ? { recordTermRepaired: true } : {}) });
+      }
+    } catch { /* listing is best-effort; solution creation already succeeded */ }
+
+    return ok({
+      created: true,
+      solution: { id: solution.id, name: solution.name, slug: (solution as { slug?: string }).slug ?? null },
+      ...(seeded.length
+        ? {
+            existingTables: seeded,
+            note: 'SmartSuite pre-creates these table(s) in a new solution. They are NOT created by smartsuite_create_application, so set recordTerm on them with smartsuite_update_application if you need something other than what is shown.',
+          }
+        : {}),
+    });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }

@@ -9,9 +9,18 @@ function formatItems(items: Array<Record<string, unknown>>, args: Record<string,
   return readFormat(args) === 'compact' ? { ...toCompactTable(items) } : { items };
 }
 
+/**
+ * Keys stripped from a record's `fields` because they are internal plumbing or are already
+ * surfaced at the top level (id/title/createdAt/updatedAt).
+ *
+ * `autonumber` is deliberately NOT here: it is a real, user-visible field in the schema and the
+ * business identifier people key on, and stripping it left no way to read or export a record
+ * number at all (GitHub #5). Anything still listed can be pulled back with an explicit `fields`
+ * projection — see projectRecord.
+ */
 const SYSTEM_FIELDS = new Set([
   'id', 'title', 'application_id', 'first_created', 'last_updated',
-  'application_slug', 'autonumber', 'comments_count', 'ranking',
+  'application_slug', 'comments_count', 'ranking',
   'followed_by', 'fields_metadata',
 ]);
 
@@ -63,10 +72,12 @@ function projectRecord(record: SmartSuiteRecord, fieldSlugs: string[] | undefine
   if (record.first_created) result['createdAt'] = record.first_created.on;
   if (record.last_updated)  result['updatedAt']  = record.last_updated.on;
 
+  // An explicitly requested slug is always returned: the default noise filter must never make a
+  // field unreachable, which is what made autonumber impossible to export even when asked for.
+  const wanted = fieldSlugs && fieldSlugs.length > 0 ? new Set(fieldSlugs) : null;
   const fields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(record)) {
-    if (SYSTEM_FIELDS.has(key)) continue;
-    if (fieldSlugs && fieldSlugs.length > 0 && !fieldSlugs.includes(key)) continue;
+    if (wanted ? !wanted.has(key) : SYSTEM_FIELDS.has(key)) continue;
     fields[key] = value;
   }
   result['fields'] = fields;

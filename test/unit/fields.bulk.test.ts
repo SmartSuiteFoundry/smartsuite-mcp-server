@@ -173,7 +173,7 @@ describe('handleCreateApplication with inline fields', () => {
     }, ctx));
     expect(body.structure).toHaveLength(2);
     expect(body.structure[0].label).toBe('A');
-    expect(body.record_term).toBe('Record');
+    expect(body.record_term).toBe('record');
     expect(out.fieldsCreated).toBe(2);
     expect(out.fields.every((f: any) => f.created)).toBe(true);
   });

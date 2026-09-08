@@ -5,6 +5,7 @@ import { buildAuthHeaders } from './auth.js';
 import { SmartSuiteError, httpStatusToCode } from './errors.js';
 import { Logger } from './logger.js';
 import { withRetry } from './utils/retry.js';
+import { markdownToProseMirror, proseMirrorToText } from './utils/prosemirror.js';
 import {
   ApplicationDetail,
   ApplicationSummary,
@@ -23,6 +24,16 @@ import {
   Workspace,
   Automation,
 } from './types/smartsuite.js';
+
+/** Retry-After is either delay-seconds or an HTTP date; returns milliseconds, or null if absent/unparseable. */
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 60_000);
+  const when = Date.parse(header);
+  if (Number.isNaN(when)) return null;
+  return Math.min(Math.max(when - Date.now(), 0), 60_000);
+}
 
 /** Widget `params` arrives as a JSON-encoded string; decode it, leaving non-strings untouched. */
 function parseMaybeJson(value: unknown): unknown {
@@ -119,7 +130,16 @@ export class SmartSuiteClient {
           const text = await res.text().catch(() => '');
           const code = httpStatusToCode(res.status);
           this.logger.warn('api error', { status: res.status, path, body: text.slice(0, 500) });
-          throw new SmartSuiteError(code, `SmartSuite API error ${res.status}: ${text.slice(0, 200)}`, undefined, res.status);
+          // Carry the server's Retry-After through to the retry loop. Backing off on our own
+          // schedule while the server is telling us how long to wait just burns the retry budget
+          // on requests it is still rejecting.
+          const retryAfter = parseRetryAfter(res.headers.get('retry-after'));
+          throw new SmartSuiteError(
+            code,
+            `SmartSuite API error ${res.status}: ${text.slice(0, 200)}`,
+            retryAfter != null ? { retryAfterMs: retryAfter } : undefined,
+            res.status,
+          );
         }
 
         if (res.status === 204) return undefined as T;
@@ -544,34 +564,49 @@ export class SmartSuiteClient {
     return { successful_items: res?.successful_items ?? [], failed_items: res?.failed_items ?? [] };
   }
 
+  /**
+   * Bulk delete. The endpoint is PATCH `/records/bulk_delete/` taking a BARE ARRAY OF IDS.
+   * Not `DELETE /records/bulk/` — that path allows only POST/PATCH and answers DELETE with 405
+   * (GitHub #2) — and not `items:[{id}]`, which returns 200 while deleting nothing. Both the
+   * method/path and the body shape were verified against the live API.
+   */
   async bulkDeleteRecords(applicationId: string, recordIds: string[]): Promise<void> {
-    await this.request<void>('DELETE', `/applications/${applicationId}/records/bulk/`, {
-      items: recordIds.map((id) => ({ id })),
+    await this.request<void>('PATCH', `/applications/${applicationId}/records/bulk_delete/`, {
+      items: recordIds,
     });
   }
 
   // ── Comments ───────────────────────────────────────────────────────────────
 
+  /**
+   * Comments live in a TOP-LEVEL collection filtered by query string, not under the record.
+   * `/applications/{app}/records/{rec}/comments/` does not exist and 404s (GitHub #3).
+   */
   async listComments(applicationId: string, recordId: string): Promise<Comment[]> {
     const res = await this.request<ListCommentsResponse | Comment[]>(
       'GET',
-      `/applications/${applicationId}/records/${recordId}/comments/`,
+      `/comments/?application=${encodeURIComponent(applicationId)}&record=${encodeURIComponent(recordId)}`,
     );
     if (Array.isArray(res)) return res;
     const r = res as ListCommentsResponse;
     return r.data ?? r.results ?? r.items ?? [];
   }
 
+  /**
+   * POST /comments/ with {application, record, message}. `message` must be a rich-text doc —
+   * a plain string is rejected with "Expected a dictionary, but got str."
+   */
   async createComment(
     applicationId: string,
     recordId: string,
     text: string,
   ): Promise<Comment> {
-    return this.request<Comment>(
-      'POST',
-      `/applications/${applicationId}/records/${recordId}/comments/`,
-      { message: text },
-    );
+    const doc = markdownToProseMirror(text) ?? { data: { type: 'doc', content: [] }, html: '' };
+    return this.request<Comment>('POST', '/comments/', {
+      application: applicationId,
+      record: recordId,
+      message: { ...doc, preview: proseMirrorToText(doc.data) || text },
+    });
   }
 
   // ── Views & Dashboards (reports) ─────────────────────────────────────────────

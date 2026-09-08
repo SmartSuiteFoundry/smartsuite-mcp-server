@@ -147,13 +147,24 @@ export async function handleUpdateRecords(
     const items = records.map((r) => ({ id: r.recordId, ...r.fields }));
     const res = await ctx.client.bulkUpdateRecords(applicationId, items);
 
-    // The endpoint silently drops ids it cannot match, so anything we asked for that did not come
-    // back is a failure the API never told us about. Diff to surface it rather than reporting 0.
+    // A requested id can be absent from the response for two very different reasons: the values
+    // were already what we sent (SmartSuite omits unchanged records), or the id matched nothing.
+    // The response cannot tell them apart, so probe only the missing ones — a record that still
+    // reads back was a no-op success, one that does not is the silent drop worth reporting.
     const updatedIds = new Set(res.successful_items.map((r) => r.id));
-    const missing = records
+    const absent = records
       .map((r, index) => ({ index, recordId: r.recordId }))
-      .filter((r) => !updatedIds.has(r.recordId))
-      .map((r) => ({ ...r, reason: 'Record was not updated (id not found, deleted, or not writable).' }));
+      .filter((r) => !updatedIds.has(r.recordId));
+    const unchanged: Array<{ index: number; recordId: string }> = [];
+    const missing: Array<{ index: number; recordId: string; reason: string }> = [];
+    for (const entry of absent) {
+      const exists = await ctx.client
+        .getRecord(applicationId, entry.recordId)
+        .then(() => true)
+        .catch(() => false);
+      if (exists) unchanged.push(entry);
+      else missing.push({ ...entry, reason: 'Record was not updated (id not found, deleted, or not writable).' });
+    }
     const failures = [...res.failed_items, ...missing];
 
     writeAudit(ctx.logger, {
@@ -169,6 +180,13 @@ export async function handleUpdateRecords(
     return ok({
       dryRun: false,
       updated: res.successful_items.length,
+      ...(unchanged.length
+        ? {
+            unchanged: unchanged.length,
+            unchangedRecords: unchanged,
+            unchangedNote: 'These records already held the submitted values, so SmartSuite left them out of its response. They are successes, not failures.',
+          }
+        : {}),
       failed: failures.length,
       failures,
     });

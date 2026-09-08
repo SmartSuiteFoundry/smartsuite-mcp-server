@@ -300,6 +300,10 @@ function requiredParamError(fieldType: string, params: Record<string, unknown>):
         + '(camelCase linkedApplication — as returned by describe_application — is accepted and converted.)';
     }
   }
+  if (fieldType === 'countfield' && (typeof params['linked_field'] !== 'string' || !params['linked_field'].trim())) {
+    return 'countfield requires params.linked_field (the linkedrecord field slug in THIS table whose linked records get counted). '
+      + 'Everything else is optional — SmartSuite fills the defaults.';
+  }
   if (fieldType === 'lookupfield' || fieldType === 'rollupfield') {
     for (const key of ['linked_field', 'field_selection']) {
       if (params[key] === undefined) {
@@ -346,7 +350,9 @@ export const ROLLUP_FUNCTIONS = ['sum', 'min', 'max', 'average', 'range'] as con
 
 /** Tokens seen in the wild or previously advertised that do not compute — worth a pointed message. */
 const ROLLUP_NON_FUNCTIONS: Record<string, string> = {
-  count: 'Rollups have no "count" aggregate — use a countfield to count linked records, or sum a numeric field.',
+  count: 'Rollups have no "count" aggregate. To count linked records use a COUNT FIELD, which is a distinct field type: '
+    + 'create_field({fieldType:"countfield", label:"# Line Items", params:{linked_field:"<the linkedrecord field slug in this table>"}}). '
+    + 'It needs nothing else, and supports field_filter + include_filters:true for a conditional count. A formula COUNT([link]) also works but is not the native field.',
   concatenate: 'A "concatenate" rollup returns nothing over a numeric target. To join values across a link, use a formula field with ARRAYJOIN([link].[field], "; ").',
   count_distinct: 'Not a rollup aggregate. COUNT_DISTINCT exists in formula fields.',
   median: 'Not a rollup aggregate. MEDIAN exists in formula fields.',
@@ -671,6 +677,62 @@ export async function handleUpdateField(args: Record<string, unknown>, ctx: Tool
  * Delete a field by slug. Requires readwrite/admin + SMARTSUITE_ENABLE_SCHEMA_WRITE + SMARTSUITE_ENABLE_DELETE.
  * Dry-run preview unless confirm:true. Destructive — the field and its data are removed.
  */
+export interface FieldReference {
+  kind: string;
+  where: string;
+  detail?: string;
+}
+
+/** Does a ProseMirror-ish blob mention this slug anywhere (AI prompt pills carry it as a node attr)? */
+function mentionsSlug(value: unknown, slug: string): boolean {
+  if (value == null) return false;
+  return JSON.stringify(value).includes(slug);
+}
+
+/**
+ * Find everything in an application that points at a field, so deleting it is not a silent
+ * amputation. SmartSuite removes the field without touching its referents: formulas keep a dead
+ * `[slug]`, AI prompts keep a dead pill, rollups keep a dangling target, and views keep filtering
+ * on nothing — none of which surfaces until someone opens the thing that broke.
+ *
+ * Scans the app's own schema and layout; `views` is optional and scanned when supplied.
+ */
+export function findFieldReferences(
+  app: { structure?: FieldDefinition[]; structure_layout?: unknown },
+  slug: string,
+  views?: Array<Record<string, unknown>>,
+): FieldReference[] {
+  const refs: FieldReference[] = [];
+  for (const f of app.structure ?? []) {
+    if (f.slug === slug) continue;
+    const p = (f.params ?? {}) as Record<string, any>;
+    if (typeof p['formula'] === 'string' && new RegExp(`\\[${slug}\\]`).test(p['formula'])) {
+      refs.push({ kind: 'formula', where: `${f.label} (${f.slug})`, detail: p['formula'] });
+    }
+    if (p['ai_agent'] && mentionsSlug(p['ai_agent'], slug)) {
+      refs.push({ kind: 'ai-prompt', where: `${f.label} (${f.slug})`, detail: 'AI field prompt references this field' });
+    }
+    for (const key of ['linked_field', 'field_selection', 'linked_field_slug']) {
+      if (p[key] === slug) refs.push({ kind: f.field_type, where: `${f.label} (${f.slug})`, detail: `params.${key}` });
+    }
+    if (p['field_filter'] && mentionsSlug(p['field_filter'], slug)) {
+      refs.push({ kind: 'field-filter', where: `${f.label} (${f.slug})`, detail: 'filter condition references this field' });
+    }
+  }
+  const layout = app.structure_layout as Record<string, any> | undefined;
+  if (layout?.['fields_visibility_conditions'] && mentionsSlug(layout['fields_visibility_conditions'], slug)) {
+    refs.push({ kind: 'display-logic', where: 'record-view layout', detail: 'a visibility condition tests this field' });
+  }
+  for (const v of views ?? []) {
+    const name = (v['label'] ?? v['name'] ?? v['id']) as string;
+    // The slug can appear in filters, sorts, grouping, or the visible-field list.
+    if (mentionsSlug(v['state'] ?? v, slug)) {
+      refs.push({ kind: 'view', where: String(name), detail: 'view config references this field (filter, sort, group, or visible fields)' });
+    }
+  }
+  return refs;
+}
+
 export async function handleDeleteField(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   const blocked = schemaWriteGuard(ctx);
   if (blocked) return blocked;
@@ -691,9 +753,45 @@ export async function handleDeleteField(args: Record<string, unknown>, ctx: Tool
     if (field.params?.system) return err('SMARTSUITE_VALIDATION_ERROR', `Field "${slug}" (${field.label}) is a system field and cannot be deleted.`);
 
     const info = { slug, label: field.label, fieldType: field.field_type };
-    if (!confirm) return ok({ dryRun: true, wouldDelete: info, note: 'Removes the field and its data. Recoverable via smartsuite_restore_field. Re-call with confirm:true to delete.' });
+
+    // SmartSuite deletes the field without repairing anything that points at it, and reports no
+    // warning. Surface the referents so a delete is never a silent amputation.
+    const full = await ctx.client.getApplication(applicationId, { forceRefresh: true }).catch(() => app);
+    let views: Array<Record<string, unknown>> | undefined;
+    let viewsChecked = true;
+    try {
+      views = (await ctx.client.listReports(applicationId)) as unknown as Array<Record<string, unknown>>;
+    } catch {
+      viewsChecked = false;
+    }
+    const references = findFieldReferences(full, slug, views);
+    const refBlock = references.length
+      ? {
+          references,
+          warning: `${references.length} thing(s) in this table reference "${slug}". SmartSuite will NOT update them — formulas keep a dead [${slug}], AI prompts keep a dead pill, and dependent fields dangle. Repair them after deleting (or before).`,
+        }
+      : { references: [] as FieldReference[] };
+    const scopeNote = viewsChecked
+      ? 'Checked this table\'s fields, record-view layout, and views. Automations and other tables are NOT checked.'
+      : 'Checked this table\'s fields and record-view layout; views could not be read. Automations and other tables are NOT checked.';
+
+    if (!confirm) {
+      return ok({
+        dryRun: true,
+        wouldDelete: info,
+        ...refBlock,
+        scope: scopeNote,
+        note: 'Removes the field and its data. Recoverable via smartsuite_restore_field. Re-call with confirm:true to delete.',
+      });
+    }
     await ctx.client.deleteField(applicationId, slug);
-    return ok({ deleted: true, ...info, restoreHint: 'Recover with smartsuite_restore_field (applicationId + slug).' });
+    return ok({
+      deleted: true,
+      ...info,
+      ...refBlock,
+      scope: scopeNote,
+      restoreHint: 'Recover with smartsuite_restore_field (applicationId + slug).',
+    });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }

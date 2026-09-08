@@ -22,7 +22,12 @@ export async function withRetry<T>(
       const isRetryable =
         err instanceof SmartSuiteError && err.statusCode != null && RETRYABLE_STATUS.has(err.statusCode);
       if (!isRetryable || attempt === opts.maxAttempts - 1) throw err;
-      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 100;
+      // Honour the server's own Retry-After when it sends one — on a 429 it knows when the
+      // window reopens, and guessing shorter just spends the next attempt on another rejection.
+      const advised = (err as SmartSuiteError).details?.['retryAfterMs'];
+      const delay = typeof advised === 'number' && advised > 0
+        ? advised + Math.random() * 100
+        : baseDelay * Math.pow(2, attempt) + Math.random() * 100;
       await sleep(delay);
     }
   }
