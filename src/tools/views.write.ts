@@ -48,7 +48,22 @@ export interface ViewConfig {
   filterOperator?: 'and' | 'or';
   sort?: unknown[];
   groupBy?: unknown[];
+  /** Calendar: the date field records are placed on. Without it a calendar opens blank. */
+  dateField?: string;
+  /** Kanban: the field whose values become the columns. Without it a board has no columns. */
+  stackBy?: string;
+  /** Kanban: optional second axis (rows). */
+  swimlaneBy?: string;
 }
+
+/** Default colour SmartSuite gives a calendar's date field; matches UI-created calendars. */
+const CALENDAR_FIELD_COLOR = { background: '#B7E3FB', font: '#2E3538' };
+
+/** View modes whose usable configuration lives in a window no other parameter reaches. */
+export const VIEW_MODE_BINDINGS: Record<string, { param: string; what: string }> = {
+  calendar: { param: 'dateField', what: 'the date field records are placed on' },
+  kanban: { param: 'stackBy', what: 'the field whose values become the columns' },
+};
 
 /** Overlay caller-supplied config windows onto a state object (mutates and returns it). */
 export function applyViewConfig(state: Record<string, any>, config: ViewConfig): Record<string, any> {
@@ -64,7 +79,38 @@ export function applyViewConfig(state: Record<string, any>, config: ViewConfig):
   }
   if (Array.isArray(config.sort)) state['sortWindow'] = { sort: config.sort };
   if (Array.isArray(config.groupBy)) state['groupbyWindow'] = { ...(state['groupbyWindow'] ?? {}), group: config.groupBy };
+
+  // A calendar renders from calendarFieldsWindow.fields, NOT from groupBy/sort. Without this a
+  // calendar is created, reports success, and opens with nothing on it.
+  if (typeof config.dateField === 'string' && config.dateField) {
+    state['calendarFieldsWindow'] = {
+      ...(state['calendarFieldsWindow'] ?? {}),
+      fields: [{ slug: config.dateField, color: CALENDAR_FIELD_COLOR }],
+    };
+  }
+  // A kanban stacks on stackByWindow.columnFieldSlug. groupBy writes groupbyWindow, which is a
+  // different axis — passing a field there leaves the board with no columns at all.
+  if (typeof config.stackBy === 'string' && config.stackBy) {
+    state['stackByWindow'] = { ...(state['stackByWindow'] ?? {}), columnFieldSlug: config.stackBy };
+  }
+  if (typeof config.swimlaneBy === 'string' && config.swimlaneBy) {
+    state['stackByWindow'] = { ...(state['stackByWindow'] ?? {}), swimlaneFieldSlug: config.swimlaneBy };
+  }
   return state;
+}
+
+/**
+ * A calendar with no date field and a kanban with no stack field both create cleanly and open
+ * unusable, so warn at the point of creation rather than leaving it to be discovered in the UI.
+ */
+export function viewBindingWarning(viewMode: string, state: Record<string, any>): string | null {
+  if (viewMode === 'calendar' && !(state['calendarFieldsWindow']?.fields ?? []).length) {
+    return 'This calendar has no date field bound, so it will open empty. Pass dateField (a date-type field slug) to place records on the calendar.';
+  }
+  if (viewMode === 'kanban' && !state['stackByWindow']?.columnFieldSlug) {
+    return 'This board has no stack-by field, so it will render without columns. Pass stackBy (a status or single-select field slug) to create the columns.';
+  }
+  return null;
 }
 
 function readConfig(args: Record<string, unknown>): ViewConfig {
@@ -74,11 +120,15 @@ function readConfig(args: Record<string, unknown>): ViewConfig {
     filterOperator: args['filterOperator'] as 'and' | 'or' | undefined,
     sort: args['sort'] as unknown[] | undefined,
     groupBy: args['groupBy'] as unknown[] | undefined,
+    dateField: args['dateField'] as string | undefined,
+    stackBy: args['stackBy'] as string | undefined,
+    swimlaneBy: args['swimlaneBy'] as string | undefined,
   };
 }
 
 function hasConfig(c: ViewConfig): boolean {
-  return [c.visibleFields, c.filters, c.sort, c.groupBy].some(Array.isArray);
+  return [c.visibleFields, c.filters, c.sort, c.groupBy].some(Array.isArray)
+    || [c.dateField, c.stackBy, c.swimlaneBy].some((v) => typeof v === 'string' && v);
 }
 
 /** Collect the field slugs referenced by a config so they can be validated against the schema. */
@@ -89,6 +139,7 @@ function referencedSlugs(c: ViewConfig): string[] {
   for (const arr of [c.filters, c.sort, c.groupBy]) {
     if (Array.isArray(arr)) for (const item of arr) { const f = fieldOf(item); if (typeof f === 'string') out.push(f); }
   }
+  for (const one of [c.dateField, c.stackBy, c.swimlaneBy]) if (typeof one === 'string' && one) out.push(one);
   return out;
 }
 
@@ -103,6 +154,9 @@ function slimView(r: Report): Record<string, unknown> {
     visibleFields: state['fieldsWindow']?.visibleFields ?? null,
     sort: state['sortWindow']?.sort ?? [],
     groupBy: state['groupbyWindow']?.group ?? [],
+    // Surfaced so a reader can tell a working calendar/board from a blank one.
+    ...(r.view_mode === 'calendar' ? { dateField: state['calendarFieldsWindow']?.fields?.[0]?.slug ?? null } : {}),
+    ...(r.view_mode === 'kanban' ? { stackBy: state['stackByWindow']?.columnFieldSlug ?? null } : {}),
   };
 }
 
@@ -137,10 +191,12 @@ export async function handleCreateView(args: Record<string, unknown>, ctx: ToolC
       return err('SMARTSUITE_VALIDATION_ERROR', `A view named "${label}" already exists in this application. Try "${suggestion}".`);
     }
 
+    const previewWarning = viewBindingWarning(viewMode, applyViewConfig(defaultViewState(), config));
     if (!confirm) {
       return ok({
         dryRun: true,
         wouldCreate: { applicationId, solution, label, viewMode, description: description ?? '', config: hasConfig(config) ? config : null },
+        ...(previewWarning ? { warning: previewWarning } : {}),
         hint: 'Label is available. Set confirm=true to create the view.',
       });
     }
@@ -149,11 +205,14 @@ export async function handleCreateView(args: Record<string, unknown>, ctx: ToolC
     if (typeof description === 'string') body['description'] = description;
     const created = await ctx.client.createReport(body);
 
-    if (hasConfig(config)) {
+    // Always write the state for a mode that needs a binding, so the warning below reflects what
+    // was actually saved rather than what the caller happened to pass.
+    if (hasConfig(config) || VIEW_MODE_BINDINGS[viewMode]) {
       await ctx.client.updateReport(created.id, { state: applyViewConfig(defaultViewState(), config) });
     }
     const final = await ctx.client.getReport(created.id).catch(() => created);
-    return ok({ created: true, mode: ctx.config.mode, view: slimView(final) });
+    const warning = viewBindingWarning(viewMode, (final.state ?? {}) as Record<string, any>);
+    return ok({ created: true, mode: ctx.config.mode, view: slimView(final), ...(warning ? { warning } : {}) });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }
@@ -197,12 +256,13 @@ export async function handleUpdateView(args: Record<string, unknown>, ctx: ToolC
     }
 
     if (Object.keys(patch).length === 0) {
-      return err('SMARTSUITE_VALIDATION_ERROR', 'Nothing to update. Provide label, description, and/or view config (visibleFields, filters, sort, groupBy).');
+      return err('SMARTSUITE_VALIDATION_ERROR', 'Nothing to update. Provide label, description, and/or view config (visibleFields, filters, sort, groupBy, dateField for a calendar, stackBy/swimlaneBy for a kanban).');
     }
 
     await ctx.client.updateReport(viewId, patch);
     const final = await ctx.client.getReport(viewId).catch(() => report);
-    return ok({ updated: true, view: slimView(final) });
+    const warning = viewBindingWarning(final.view_mode ?? '', (final.state ?? {}) as Record<string, any>);
+    return ok({ updated: true, view: slimView(final), ...(warning ? { warning } : {}) });
   } catch (e) {
     return { content: [{ type: 'text', text: JSON.stringify({ error: toErrorResponse(e) }, null, 2) }], isError: true };
   }

@@ -413,14 +413,30 @@ export async function handleUpdateDashboardWidget(args: Record<string, unknown>,
     const patch: Record<string, unknown> = { ...widgetLayoutPatch(args) };
     if (typeof args['name'] === 'string') patch['name'] = args['name'];
     if (typeof args['tabId'] === 'string') patch['tab'] = args['tabId'];
-    if (args['params'] !== undefined) patch['params'] = args['params'];
+
+    // `params` is REPLACED by the API, not merged: PATCHing {chart_type:"bar"} alone answers 400
+    // with values/group_by/totals/benchmarks "Field required", and a caller who supplies a
+    // plausible-looking full blob instead succeeds while silently dropping the data source.
+    // Read the widget and merge, so a partial patch changes only what it names.
+    if (args['params'] !== undefined) {
+      const incoming = args['params'];
+      if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+        const current = await ctx.client.getWidget(widgetId).catch(() => null);
+        const existing = (current?.params && typeof current.params === 'object' && !Array.isArray(current.params))
+          ? (current.params as Record<string, unknown>)
+          : {};
+        patch['params'] = { ...existing, ...(incoming as Record<string, unknown>) };
+      } else {
+        patch['params'] = incoming;
+      }
+    }
     if (typeof args['showName'] === 'boolean') patch['show_name'] = args['showName'];
     if (typeof args['color'] === 'string') patch['color'] = args['color'];
     if (typeof args['description'] === 'string') patch['description'] = args['description'];
     if (typeof args['collapsedByDefault'] === 'boolean') patch['collapsed_by_default'] = args['collapsedByDefault'];
 
     if (Object.keys(patch).length === 0) {
-      return err('SMARTSUITE_VALIDATION_ERROR', 'Nothing to update. Provide position, size, name, params, showName, color, description, collapsedByDefault, and/or tabId.');
+      return err('SMARTSUITE_VALIDATION_ERROR', 'Nothing to update. Provide position, size, name, params (merged onto the widget\'s existing params), showName, color, description, collapsedByDefault, and/or tabId.');
     }
 
     const updated = await ctx.client.updateWidget(widgetId, patch);

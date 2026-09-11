@@ -1,0 +1,450 @@
+{
+  "runAt": "2026-09-10T13:55:53.892Z",
+  "solutionId": "6aa1c8465bd9be01e2cf4588",
+  "apps": {
+    "Table 1": "6aa1c8465bd9be01e2cf4589",
+    "Regulations": "6aa1c8473dad7bdcd90c1968",
+    "Requirements": "6aa1c8492637cd9eb2a40ff0",
+    "Controls": "6aa1c84af96713c34f85ac1f",
+    "Control Tests": "6aa1c84ba5147dc4637160ed",
+    "Audits": "6aa1c84d9f78f95da3f0d643",
+    "Findings": "6aa1c84fbae444952d5b3f9a"
+  },
+  "fields": {
+    "coOwner": "sca2d1479c",
+    "coFreq": "se72318c93",
+    "rootCause": "s8cb994e23"
+  },
+  "results": [
+    {
+      "id": "P00",
+      "title": "six tables linked in a chain",
+      "status": "PASS",
+      "notes": "6/6 tables, 5/5 links",
+      "seconds": null
+    },
+    {
+      "id": "P00b",
+      "title": "record term set on all tables",
+      "status": "PASS",
+      "notes": "all set (record), incl. the seeded Table 1",
+      "seconds": null
+    },
+    {
+      "id": "P01",
+      "title": "read tools return the live structure",
+      "status": "PASS",
+      "notes": "all 6 tables listed + seeded Table 1; describe_application surfaced linkedApplication. First run's 0/6 was a harness config defect (missing allowedSolutions), not a server bug.",
+      "seconds": null
+    },
+    {
+      "id": "P01-A",
+      "title": "tour phrased from live data, not the plan",
+      "status": "N/A-A",
+      "notes": "needs a connector session",
+      "seconds": null
+    },
+    {
+      "id": "P02",
+      "title": "count through a link returns the real number",
+      "status": "PASS",
+      "notes": "4 linked requirements -> count field reads 4 (after a 20s wait for reciprocal-link consistency)",
+      "seconds": null
+    },
+    {
+      "id": "P03",
+      "title": "rolling-window grid view",
+      "status": "PASS",
+      "notes": "filter stored as a relative window, not fixed dates",
+      "evidence": {
+        "viewId": "6aa1c968d1d17e22ad969947",
+        "state": "{\"filterWindow\":{\"opened\":false,\"filter\":{\"operator\":\"and\",\"fields\":[]},\"new_filters\":{\"operator\":\"and\",\"conditions\":[{\"field\":\"sc91315815\",\"comparison\":\"is_within\",\"value\":{\"range\":\"next\",\"number\":30,\"unit\":\"day\"}}]}},\"fieldsWindow\":{\"visibleFields\":[\"title\","
+      },
+      "at": "2026-09-09T21:02:34.174Z",
+      "seconds": 2.5
+    },
+    {
+      "id": "P04",
+      "title": "reconfigure a view in place",
+      "status": "PASS",
+      "notes": "views 2->2 (no clone: true), original filter kept: true, desc sort applied: true",
+      "evidence": {
+        "viewId": "6aa1c96a5a18caa8e5277da3"
+      },
+      "at": "2026-09-09T21:02:38.743Z",
+      "seconds": 4.6
+    },
+    {
+      "id": "P05",
+      "title": "calendar bound to a date field",
+      "status": "FAIL",
+      "notes": "create_view/update_view expose no parameter for calendarFieldsWindow.fields, so the date binding cannot be set at all. UI-built calendars store calendarFieldsWindow.fields[].slug. Calendar opens blank; tool reports success.",
+      "evidence": {
+        "viewId": "6aa1c96f7c3bcc1662f910a4",
+        "state": "{}"
+      },
+      "at": "2026-09-09T21:02:40.818Z",
+      "seconds": 2.1
+    },
+    {
+      "id": "P06",
+      "title": "re-stack kanban onto severity",
+      "status": "FAIL",
+      "notes": "groupBy wrote severity into groupbyWindow, but a kanban stacks on stackByWindow.columnFieldSlug, which stayed null \u2014 the board has no columns. Initially recorded PASS by a substring match on the whole state blob; corrected after inspecting where the value actually landed.",
+      "evidence": {
+        "viewId": "6aa1c9715ffa883df8bf56b7",
+        "after": "{\"filterWindow\":{\"opened\":false,\"filter\":{\"operator\":\"and\",\"fields\":[]},\"new_filters\":{\"operator\":\"and\",\"conditions\":[{\"field\":\"status\",\"comparison\":\"is_not\",\"value\":\"complete\"}]}},\"fieldsWindow\":{\"visibleFields\":[\"title\"],\"fixedFieldsCount\":1,\"columnsWidth\":{"
+      },
+      "at": "2026-09-09T21:02:44.735Z",
+      "seconds": 3.9
+    },
+    {
+      "id": "P07",
+      "title": "counts and rollups across links",
+      "status": "PASS",
+      "notes": "count: ok | conditional count: ok | sum rollup: ok",
+      "evidence": null,
+      "at": "2026-09-09T21:06:50.783Z"
+    },
+    {
+      "id": "P07b",
+      "title": "two-hop count (Regulations -> Requirements -> Controls)",
+      "status": "PARTIAL",
+      "notes": "accepted a one-hop rollup for a two-hop question \u2014 no error surfaced",
+      "evidence": null,
+      "at": "2026-09-09T21:06:52.295Z",
+      "seconds": 7.3
+    },
+    {
+      "id": "P08a",
+      "title": "DATEDIFF written earlier-date-first",
+      "status": "PASS",
+      "notes": "created; lint raised 0 note(s)",
+      "evidence": null,
+      "at": "2026-09-09T21:06:53.945Z"
+    },
+    {
+      "id": "P08b",
+      "title": "reversed DATEDIFF is flagged (API says valid)",
+      "status": "FAIL",
+      "notes": "API valid=true, lint caught reversed order=false",
+      "evidence": null,
+      "at": "2026-09-09T21:06:54.551Z"
+    },
+    {
+      "id": "P08c",
+      "title": "yes/no formula stored as a boolean, not text",
+      "status": "PASS",
+      "notes": "created with returnType yesnofield",
+      "evidence": null,
+      "at": "2026-09-09T21:06:56.455Z",
+      "seconds": 4.2
+    },
+    {
+      "id": "P09",
+      "title": "percent-scale thresholds",
+      "status": "PARTIAL",
+      "notes": "both scales validate (0.9: true, 90: true) \u2014 the API cannot tell them apart, and neither is flagged. A formula reads a percent as a FRACTION, so 90 is the silent bug.",
+      "evidence": null,
+      "at": "2026-09-09T21:06:57.134Z",
+      "seconds": 0.7
+    },
+    {
+      "id": "P10",
+      "title": "lookup through a link",
+      "status": "PASS",
+      "notes": "lookup created against the control owner",
+      "evidence": null,
+      "at": "2026-09-09T21:06:58.467Z",
+      "seconds": 1.3
+    },
+    {
+      "id": "P11a",
+      "title": "existing select options survive an add",
+      "status": "PASS",
+      "notes": "4 -> 5 options, all keep a color: true",
+      "evidence": null,
+      "at": "2026-09-09T21:07:02.579Z"
+    },
+    {
+      "id": "P11b",
+      "title": "help text set",
+      "status": "PASS",
+      "notes": "set_field_help_text works; first run failed on my wrong param name (text vs helpText), not a defect",
+      "evidence": null,
+      "at": "2026-09-09T21:07:02.580Z"
+    },
+    {
+      "id": "P11c",
+      "title": "display logic applied",
+      "status": "PASS",
+      "notes": "set_display_logic works with target/targetId; first run failed on my wrong params, not a defect",
+      "evidence": null,
+      "at": "2026-09-09T21:07:02.580Z",
+      "seconds": 4.1
+    },
+    {
+      "id": "P12",
+      "title": "section created and field moved into it",
+      "status": "PASS",
+      "notes": "section added; coverage field still placed in the layout: true",
+      "evidence": null,
+      "at": "2026-09-09T21:07:04.085Z",
+      "seconds": 1.5
+    },
+    {
+      "id": "P13",
+      "title": "analyze_formulas reports every formula with validity",
+      "status": "PASS",
+      "notes": "2 formula field(s) analysed, 0 reported invalid",
+      "evidence": null,
+      "at": "2026-09-09T21:07:04.237Z",
+      "seconds": 0.2
+    },
+    {
+      "id": "P14a",
+      "title": "prompt embeds live field references (pills)",
+      "status": "PASS",
+      "notes": "description referenced as a pill, not typed text",
+      "evidence": null,
+      "at": "2026-09-10T13:37:35.705Z"
+    },
+    {
+      "id": "P14b",
+      "title": "agent set to run automatically",
+      "status": "PASS",
+      "notes": "ai_agent keys present: enabled, instructions, enable_internet_search, run_automatically | run_automatically=true",
+      "evidence": null,
+      "at": "2026-09-10T13:37:35.708Z"
+    },
+    {
+      "id": "P14c",
+      "title": "agent has a model credential (without one it cannot run)",
+      "status": "FAIL",
+      "notes": "model=undefined \u2014 real AI fields carry a \"cred:<uuid>\" reference",
+      "evidence": null,
+      "at": "2026-09-10T13:37:35.708Z",
+      "seconds": 4.4
+    },
+    {
+      "id": "P15",
+      "title": "internet search enabled on the field",
+      "status": "PARTIAL",
+      "notes": "enable_internet_search defaults to FALSE and the aiPrompt path never sets it, so a \"find it online with a source link\" prompt produces an agent that can only invent one. P15b proves the setting IS honoured when passed explicitly via params.ai_agent \u2014 so this is a discoverability gap, not a capability gap: the description says \"other ai_agent settings in params.ai_agent if needed\" without naming the keys or the default.",
+      "evidence": null,
+      "at": "2026-09-10T13:37:39.952Z",
+      "seconds": 4.2
+    },
+    {
+      "id": "P15b",
+      "title": "explicit ai_agent settings survive the write",
+      "status": "PASS",
+      "notes": "run_automatically=true, enable_internet_search=true; credentials listable: 0",
+      "evidence": null,
+      "at": "2026-09-10T13:37:44.575Z",
+      "seconds": 4.6
+    },
+    {
+      "id": "P16",
+      "title": "prompt replaced, other agent settings preserved",
+      "status": "PASS",
+      "notes": "instructions changed: true; run_automatically/internet_search preserved: true (before true/true, after true/true)",
+      "evidence": null,
+      "at": "2026-09-10T13:37:52.398Z",
+      "seconds": 7.8
+    },
+    {
+      "id": "P17",
+      "title": "unclassified records are countable before charting",
+      "status": "PASS",
+      "notes": "0/0 findings classified by the agent \u2014 a chart built now would show 0. Whether the assistant SAYS so is dimension A.",
+      "evidence": null,
+      "at": "2026-09-10T13:37:52.648Z"
+    },
+    {
+      "id": "P17-A",
+      "title": "assistant discloses the unclassified remainder",
+      "status": "N/A-A",
+      "notes": "needs a connector session",
+      "evidence": null,
+      "at": "2026-09-10T13:37:52.648Z",
+      "seconds": 0.3
+    },
+    {
+      "id": "P18",
+      "title": "countdown + progress placed without overlap",
+      "status": "FAIL",
+      "notes": "1/2 widgets added; 0 overlapping pair(s) among 1 on the tab",
+      "evidence": {
+        "widgets": [
+          {
+            "type": "progress-widget",
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 128
+          }
+        ]
+      },
+      "at": "2026-09-10T13:48:45.917Z",
+      "seconds": 2.3
+    },
+    {
+      "id": "P18-countdown-widget",
+      "title": "add countdown-widget",
+      "status": "FAIL",
+      "notes": "SmartSuite API error 400: {\"target_time\":[\"Datetime has wrong format. Use one of these formats instead: YYYY-MM-DDThh:mm",
+      "evidence": null,
+      "at": "2026-09-10T13:48:44.075Z"
+    },
+    {
+      "id": "P19",
+      "title": "card recoloured in place",
+      "status": "PASS",
+      "notes": "colour now undefined; position/size unchanged: true (0,128 1x156 -> 0,128 1x156)",
+      "evidence": null,
+      "at": "2026-09-10T13:48:50.027Z",
+      "seconds": 4.1
+    },
+    {
+      "id": "P20",
+      "title": "chart type changed, data source retained",
+      "status": "FAIL",
+      "notes": "SmartSuite API error 400: {\"values\":[\"Field required\"],\"group_by\":[\"Field required\"],\"totals\":[\"Field required\"],\"benchmarks\":[\"Fi",
+      "evidence": null,
+      "at": "2026-09-10T13:48:54.614Z",
+      "seconds": 4.6
+    },
+    {
+      "id": "P21a",
+      "title": "fourth tab added to the same dashboard",
+      "status": "PASS",
+      "notes": "tabs now 4; dashboards 0->0 (no new dashboard: true)",
+      "evidence": null,
+      "at": "2026-09-10T13:48:58.155Z"
+    },
+    {
+      "id": "P21b",
+      "title": "list, card and pivot widgets created",
+      "status": "PASS",
+      "notes": "3/3 created: list-view-widget, summary-card-widget, pivot-widget",
+      "evidence": null,
+      "at": "2026-09-10T13:49:03.553Z",
+      "seconds": 8.9
+    },
+    {
+      "id": "P22",
+      "title": "widget removed and layout reflowed with no overlaps",
+      "status": "PASS",
+      "notes": "removed: true; reflow ok; 0 overlapping pair(s) among 2",
+      "evidence": null,
+      "at": "2026-09-10T13:49:08.438Z",
+      "seconds": 4.9
+    },
+    {
+      "id": "P23",
+      "title": "content widgets carry a rich-text document",
+      "status": "PARTIAL",
+      "notes": "heading-widget: FAIL SmartSuite API error 400: {\"content\":[\"Expected a dictionary | text-block-widget: FAIL SmartSuite API error 400: {\"content\":[\"Expected a dictionary",
+      "evidence": null,
+      "at": "2026-09-10T13:49:09.976Z",
+      "seconds": 1.5
+    },
+    {
+      "id": "P24",
+      "title": "six real regulations loaded, dates exact",
+      "status": "PASS",
+      "notes": "6/6 present; 1 pre-existing row(s) left in place (one has linked requirements \u2014 deleting it would orphan them)",
+      "evidence": null,
+      "at": "2026-09-10T13:55:14.513Z"
+    },
+    {
+      "id": "P24-A",
+      "title": "assistant asks before deleting rows with children",
+      "status": "N/A-A",
+      "notes": "needs a connector session",
+      "evidence": null,
+      "at": "2026-09-10T13:55:14.513Z",
+      "seconds": 3.3
+    },
+    {
+      "id": "P25",
+      "title": "only the filtered rows were updated",
+      "status": "PASS",
+      "notes": "query matched 2 (expected 2); updated=2 unchanged=0; F-keep untouched: true",
+      "evidence": null,
+      "at": "2026-09-10T13:55:19.423Z",
+      "seconds": 4.9
+    },
+    {
+      "id": "P26",
+      "title": "form created, severity absent, test submission lands",
+      "status": "PASS",
+      "notes": "severity kept off the form: true; submission landed as a record",
+      "evidence": null,
+      "at": "2026-09-10T13:55:25.404Z",
+      "seconds": 6
+    },
+    {
+      "id": "P27",
+      "title": "create automation",
+      "status": "PARTIAL",
+      "notes": "My trigger shape was wrong, not a tool defect \u2014 the description documents \"an object with trigger_reference.trigger_id and inputs\" and the 400 named the missing key. Recorded PARTIAL rather than PASS because the documented way to learn the exact shapes is describe_automation_step \"on a similar existing automation\" \u2014 and a brand-new solution has none.",
+      "evidence": null,
+      "at": "2026-09-10T13:55:25.407Z",
+      "seconds": 0
+    },
+    {
+      "id": "P28a",
+      "title": "deleted field restored in place",
+      "status": "PASS",
+      "notes": "field present again after restore: true",
+      "evidence": null,
+      "at": "2026-09-10T13:55:37.077Z"
+    },
+    {
+      "id": "P28b",
+      "title": "deleted records restored",
+      "status": "PASS",
+      "notes": "2/2 records back in the live list",
+      "evidence": null,
+      "at": "2026-09-10T13:55:45.582Z",
+      "seconds": 20.2
+    },
+    {
+      "id": "P29",
+      "title": "no deletion without an explicit confirm",
+      "status": "PASS",
+      "notes": "bare call previewed: true; dryRun:false without confirm refused: true (CONFIRMATION_REQUIRED); records still present: 2/2",
+      "evidence": null,
+      "at": "2026-09-10T13:55:48.017Z",
+      "seconds": 2.7
+    },
+    {
+      "id": "P30",
+      "title": "nearest-working-thing is available for both limits",
+      "status": "PASS",
+      "notes": "due-month formula validates: true; date rollup created \u2014 but max over a DATE returned null in earlier probing, so it will read empty",
+      "evidence": null,
+      "at": "2026-09-10T13:55:50.960Z",
+      "seconds": 2.6
+    },
+    {
+      "id": "P31",
+      "title": "rename keeps views resolvable",
+      "status": "PASS",
+      "notes": "name now \"Control Testing\"; views on the table 2 -> 2",
+      "evidence": null,
+      "at": "2026-09-10T13:55:53.891Z"
+    },
+    {
+      "id": "P31-A",
+      "title": "assistant reports what it actually checked",
+      "status": "N/A-A",
+      "notes": "needs a connector session",
+      "evidence": null,
+      "at": "2026-09-10T13:55:53.891Z",
+      "seconds": 2.9
+    }
+  ]
+}

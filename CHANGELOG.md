@@ -3,7 +3,23 @@
 All notable changes to the SmartSuite MCP Server. Versions marked _(unreleased)_ are built and
 deployed as incremental `.mcpb` artifacts but not yet published as a GitHub release.
 
-## 1.0.2 — _(unreleased)_
+## 1.0.3
+
+Remediation cycle from the Compliance MCP Test Sequence (48 checks, `test/e2e/`). The failures
+clustered in one place: views and widgets modelled a configuration as filters + sort + columns,
+while the settings that make them work live in nested windows no parameter reached — so they were
+created, reported success, and opened unusable.
+
+### Added
+- **`create_view`/`update_view` accept `dateField` (calendar) and `stackBy`/`swimlaneBy` (kanban).** A calendar renders from `state.calendarFieldsWindow.fields` and a kanban stacks on `state.stackByWindow.columnFieldSlug`; neither was reachable, so every calendar created through the MCP opened with nothing on it and every board opened with no columns. `groupBy` looks like it should stack a board and silently does not — it writes a different axis. Both bindings are now reported back on the view, and a calendar or kanban created without one returns a `warning` instead of a clean success.
+- **Formula lint: percent thresholds.** A percent field stores `67` but a **formula reads `0.67`**. Both scales validate clean, so `>= 90` silently puts every record in the same band. Comparing a `percentfield` against a literal above 1 now warns with the corrected value.
+### Changed
+- **`update_dashboard_widget` merges `params` onto the widget's existing params** instead of replacing them. The API replaces wholesale: patching only `chart_type` was rejected with `values`, `group_by`, `totals` and `benchmarks` all "Field required", and a caller who supplied a plausible-looking full blob instead succeeded while silently dropping the data source.
+- **The reversed-`DATEDIFF` lint rule now covers the everyday shape.** It previously fired only when argument 2 was a *created-timestamp* field, so `DATEDIFF(NOW(), [due_date], "days")` — the common way to get negative "days overdue" — passed unflagged. Any date-typed second argument now qualifies; ordering between two arbitrary date fields stays unflagged, since that one is genuinely ambiguous.
+- **A rollup over the record title is refused.** Rollup aggregates are numeric, so `sum`/`max` over `title` returns null on every record; the error points at `ARRAYJOIN` in a formula field instead.
+- **Documented the settings that decide whether a feature works**, each previously reachable but unnamed: `ai_agent.enable_internet_search` (**defaults false** — an agent asked to cite a source cannot search and will invent one), `run_automatically`, and `model` (a `cred:<uuid>` reference); the required `params` for the widget types with no auto-fill template (`countdown-widget` needs a full `YYYY-MM-DDThh:mm:ss` datetime, `heading-widget`/`text-block-widget` need `content` as a rich-text doc, not a string); and the fact that automation trigger shapes can only be learned from an existing automation, which a new solution does not have.
+
+## 1.0.2
 ### Added
 - **`countfield` is documented and validated — it is the answer to "count linked records".** SmartSuite has no rollup `count` aggregate, but it does have a dedicated **Count field**, and the tool surface never mentioned it: `create_field`'s examples covered select/linked/rollup/lookup/number/currency/text and stopped there. With rollup `count` returning null and no count field in sight, callers fell back to a `COUNT([link])` formula — the reported symptom, "it always reverts to formula fields instead". A count field needs only `{fieldType:"countfield", params:{linked_field:"<link slug in this table>"}}`; SmartSuite fills every other default. Verified live: created that way it reads `valid: true` and computes immediately. It also supports `field_filter` + `include_filters:true` for a **conditional** count (e.g. only linked records not yet complete), which no rollup can do. The rollup-`count` rejection now hands back the exact `create_field` call instead of just naming the field type, and a countfield with no `linked_field` is rejected locally.
 - **`delete_field` reports what references the field before removing it.** SmartSuite deletes a field without repairing anything that pointed at it and issues no warning: formulas keep a dead `[slug]`, AI-field prompts keep a dead pill, dependent rollup/lookup/count fields dangle, filter conditions and display logic silently stop matching, and views keep filtering on nothing. Both the dry run and the delete now list every referent found in the table — formulas, AI prompts, rollup/lookup/count targets, field filters, display logic, and view configs — and say plainly that SmartSuite will not update them. The scope line states what was checked; automations and other tables are not, and when views cannot be read that is reported rather than passed off as clean.

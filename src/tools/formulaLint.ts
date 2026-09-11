@@ -225,6 +225,8 @@ function fieldTypes(schema?: ApplicationDetail): Map<string, string> {
 const CREATED_TYPES = new Set(['firstcreatedfield']);
 /** Field types and calls that carry a "now"-ish timestamp (the later side of a duration). */
 const MODIFIED_TYPES = new Set(['lastupdatedfield']);
+/** Ordinary date-bearing field types — the usual second argument to a duration. */
+const DATE_FIELD_TYPES = new Set(['datefield', 'duedatefield', 'daterangefield', 'firstcreatedfield', 'lastupdatedfield']);
 
 function mentionsType(expr: string, types: Set<string>, slugTypes: Map<string, string>): boolean {
   for (const chain of extractReferenceChains(expr)) {
@@ -334,7 +336,11 @@ export function lintFormula(
     if (call.name === 'DATEDIFF' && call.args.length >= 2 && slugTypes.size) {
       const [a, b] = call.args;
       const aIsLater = /\b(NOW|TODAY)\s*\(/.test(a) || mentionsType(a, MODIFIED_TYPES, slugTypes);
-      const bIsEarlier = mentionsType(b, CREATED_TYPES, slugTypes);
+      // Originally this required argument 2 to be a CREATED timestamp, which missed the everyday
+      // shape: DATEDIFF(NOW(), [due_date], "days") on an ordinary date field. Any date-typed second
+      // argument is enough — a NOW()-first comparison is almost never what the author meant.
+      // Ordering between two arbitrary date fields stays unflagged; that one is genuinely ambiguous.
+      const bIsEarlier = mentionsType(b, CREATED_TYPES, slugTypes) || mentionsType(b, DATE_FIELD_TYPES, slugTypes);
       if (aIsLater && bIsEarlier) {
         push('datediff-order', 'warning',
           'DATEDIFF looks reversed: the first argument is the later moment and the second is the earlier one, which yields negative durations.',
@@ -388,6 +394,22 @@ export function lintFormula(
       push('percent-arithmetic', 'warning',
         `Formula divides by 100 and references percent field${percentSlugs.length > 1 ? 's' : ''} [${[...new Set(percentSlugs)].join('], [')}], which already evaluate as fractions (0.15 for 15%).`,
         'Drop the / 100 — otherwise every result is 100x too small.');
+    }
+  }
+
+  // ── Percent thresholds: a formula reads a percent field as a FRACTION ────
+  // Stored value is 0-100 (the record API writes 67 for 67%), but the formula engine sees 0.67.
+  // Both scales validate clean, so a threshold written on the stored scale silently puts every
+  // record in the same band — measured directly, not inferred.
+  if (slugTypes.size) {
+    for (const m of masked.matchAll(/\[([a-z0-9_]+)\]\s*(>=|<=|>|<|=|!=)\s*(\d+(?:\.\d+)?)/gi)) {
+      const [, slug, op, num] = m;
+      if (slugTypes.get(slug) === 'percentfield' && Number(num) > 1) {
+        push('percent-threshold', 'warning',
+          `[${slug}] is a percent field compared against ${num}. Formulas read a percent as a FRACTION (0.67 for 67%), so this threshold is 100x too large and every record will fall on the same side.`,
+          `Write ${op} ${(Number(num) / 100).toString()} for ${num}%.`);
+        break;
+      }
     }
   }
 

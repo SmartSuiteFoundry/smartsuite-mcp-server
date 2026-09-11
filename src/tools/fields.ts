@@ -369,6 +369,12 @@ export function validateRollupParams(fieldType: string, params: Record<string, u
   if (fieldType !== 'rollupfield') return null;
   const fn = params['function'];
   if (fn === undefined) return null; // sparse params are allowed; SmartSuite fills its own default
+  // Every rollup aggregate is numeric; over the record title it returns null on every record.
+  // The linked table's schema is not visible here, so only the unambiguous case is flagged.
+  if (params['field_selection'] === 'title') {
+    return 'A rollup aggregates numbers, and "title" is the record title — sum/min/max/average/range over it returns nothing on every record. '
+      + 'Point field_selection at a numeric field on the linked table, or use ARRAYJOIN([link].[field], "; ") in a formula field to combine titles.';
+  }
   if (typeof fn !== 'string' || !ROLLUP_FUNCTIONS.includes(fn as (typeof ROLLUP_FUNCTIONS)[number])) {
     const hint = typeof fn === 'string' ? ROLLUP_NON_FUNCTIONS[fn.toLowerCase()] : undefined;
     return `Rollup function ${JSON.stringify(fn)} does not compute a value. Supported: ${ROLLUP_FUNCTIONS.join(', ')}.`

@@ -105,3 +105,16 @@ describe('create_field / create_fields / update_field gating', () => {
     expect(written().params).toMatchObject({ function: 'sum', field_selection: 'sother' });
   });
 });
+
+describe('rollup over a non-numeric target', () => {
+  // A rollup aggregates numbers; over the record title it returns null on every record.
+  it('rejects sum/max over the record title with a pointer to the alternative', () => {
+    const r = validateRollupParams('rollupfield', { linked_field: 'l', field_selection: 'title', function: 'sum' }) as any;
+    expect(r).toContain('record title');
+    expect(r).toContain('ARRAYJOIN');
+  });
+
+  it('still accepts a numeric target', () => {
+    expect(validateRollupParams('rollupfield', { linked_field: 'l', field_selection: 'samount', function: 'sum' })).toBeNull();
+  });
+});

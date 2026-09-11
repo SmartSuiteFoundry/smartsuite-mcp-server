@@ -188,3 +188,41 @@ describe('lintFormula — quiet on clean input', () => {
     expect(rules('MID([title], 1, 5)')).toContain('index-base');
   });
 });
+
+// ── Remediation: the everyday shapes the first cut of these rules missed ──────
+describe('lintFormula — widened rules', () => {
+  const rulesOf = (f: string, s?: any, rt?: string) => lintFormula(f, s, rt).map((w) => w.rule);
+  const sch = {
+    id: 'app1',
+    structure: [
+      { slug: 'due', label: 'Due', field_type: 'datefield', params: {} },
+      { slug: 'created', label: 'Created', field_type: 'firstcreatedfield', params: {} },
+      { slug: 'cov', label: 'Coverage', field_type: 'percentfield', params: {} },
+      { slug: 'amt', label: 'Amount', field_type: 'numberfield', params: {} },
+    ],
+  } as any;
+
+  // Was missed: the rule only fired when arg 2 was a created-timestamp field.
+  it('flags NOW() compared against an ordinary date field', () => {
+    expect(rulesOf('DATEDIFF(NOW(), [due], "days")', sch)).toContain('datediff-order');
+    expect(rulesOf('DATEDIFF(TODAY(), [due], "days")', sch)).toContain('datediff-order');
+  });
+
+  it('still passes the correct order, and stays out of genuinely ambiguous cases', () => {
+    expect(rulesOf('DATEDIFF([due], NOW(), "days")', sch)).not.toContain('datediff-order');
+    expect(rulesOf('DATEDIFF([created], [due], "days")', sch)).not.toContain('datediff-order');
+  });
+
+  // A formula reads a percent as a fraction, so 90 means 9000%.
+  it('flags a percent threshold written on the stored 0-100 scale', () => {
+    const w = lintFormula('IF([cov] >= 90, "Green", "Red")', sch, 'textfield')
+      .find((x) => x.rule === 'percent-threshold');
+    expect(w?.message).toContain('100x too large');
+    expect(w?.hint).toContain('0.9');
+  });
+
+  it('leaves a correct fractional threshold and non-percent comparisons alone', () => {
+    expect(rulesOf('IF([cov] >= 0.9, "Green", "Red")', sch, 'textfield')).not.toContain('percent-threshold');
+    expect(rulesOf('IF([amt] >= 90, "a", "b")', sch, 'textfield')).not.toContain('percent-threshold');
+  });
+});
